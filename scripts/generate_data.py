@@ -17,6 +17,7 @@ import datetime
 import numpy as np
 import random
 import math
+import logging
 
 ## COMMAND-LINE ARG MODULES
 import getopt
@@ -24,7 +25,9 @@ import argparse
 import collections
 
 ## MODULES
-from sfindernn import data_generator
+from sfindernn import __version__, __date__
+from sfindernn import logger
+from sfindernn.data_generator import DataGenerator
 
 
 #### GET SCRIPT ARGS ####
@@ -85,13 +88,22 @@ def main():
 	"""Main function"""
 
 	#===========================
+	#==   INITIALIZE LOGGER
+	#===========================
+	#logging.basicConfig(format="%(module)s:%(levelname)s %(message)s")
+	#logger= logging.getLogger(__name__)
+	#logger.setLevel(logging.INFO)
+	#logger.info("This is sfindernn {0}-({1}) data_generator script ".format(__version__, __date__))
+
+
+	#===========================
 	#==   PARSE ARGS
 	#===========================
-	print("INFO: Get script args ...")
+	logger.info("Get script args ...")
 	try:
 		args= get_args()
 	except Exception as ex:
-		print("ERROR: Failed to get and parse options (err=%s)",str(ex))
+		logger.error("Failed to get and parse options (err=%s)",str(ex))
 		return 1
 
 	# - Data samples

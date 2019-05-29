@@ -19,7 +19,6 @@ def get_version():
 
 
 reqs = ['numpy>=1.10',
-        'scipy>=0.16',
         'astropy>=2.0, <3']
 
 #if sys.version_info < (2, 7):

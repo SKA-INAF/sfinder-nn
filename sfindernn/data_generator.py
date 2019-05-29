@@ -24,7 +24,7 @@ from sklearn.model_selection import train_test_split
 
 ## PACKAGE MODULES
 #from . import logger
-from . import Utils
+from .utils import Utils
 
 logger = logging.getLogger(__name__)
 
