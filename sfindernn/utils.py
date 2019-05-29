@@ -10,6 +10,12 @@ import string
 import logging
 import numpy as np
 
+## ASTRO
+from astropy.io import fits
+
+
+logger = logging.getLogger(__name__)
+
 
 ###########################
 ##     CLASS DEFINITIONS
@@ -23,9 +29,11 @@ class Utils(object):
 
 	def __init__(self):
 		""" Return a Utils object """
+		#self.logger = logging.getLogger(__name__)
+		#_logger = logging.getLogger(__name__)
 
-	@staticmethod
-	def has_patterns_in_string(s,patterns):
+	@classmethod
+	def has_patterns_in_string(cls,s,patterns):
 		""" Return true if patterns are found in string """
 		if not patterns:		
 			return False
@@ -38,13 +46,14 @@ class Utils(object):
 
 		return found
 
-	@staticmethod
-	def write_ascii(data,filename,header=''):
+	@classmethod
+	def write_ascii(cls,data,filename,header=''):
 		""" Write data to ascii file """
 
 		# - Skip if data is empty
 		if data.size<=0:
-			logging.warn("Empty data given, no file will be written!")
+			#cls._logger.warn("Empty data given, no file will be written!")
+			logger.warn("Empty data given, no file will be written!")
 			return
 
 		# - Open file and write header
@@ -65,15 +74,16 @@ class Utils(object):
 
 		fout.close();
 
-	@staticmethod
-	def read_ascii(filename,skip_patterns=[]):
+	@classmethod
+	def read_ascii(cls,filename,skip_patterns=[]):
 		""" Read an ascii file line by line """
 	
 		try:
 			f = open(filename, 'r')
 		except IOError:
 			errmsg= 'Could not read file: ' + filename
-			logging.error(errmsg)
+			#cls._logger.error(errmsg)
+			logger.error(errmsg)
 			raise IOError(errmsg)
 
 		fields= []
@@ -95,25 +105,28 @@ class Utils(object):
 		return fields
 
 
-	@staticmethod
-	def write_fits(data,filename):
+	@classmethod
+	def write_fits(cls,data,filename):
 		""" Read data to FITS image """
 
 		hdu= fits.PrimaryHDU(data)
 		hdul= fits.HDUList([hdu])
 		hdul.writeto(filename,overwrite=True)
 
-	@staticmethod
-	def read_fits(filename):
+	@classmethod
+	def read_fits(cls,filename):
 		""" Read FITS image and return data """
 
+		# - Open file
 		try:
 			hdu= fits.open(filename,memmap=False)
 		except Exception as ex:
 			errmsg= 'Cannot read image file: ' + filename
-			logging.error(errmsg)
+			#cls._logger.error(errmsg)
+			logger.error(errmsg)
 			raise IOError(errmsg)
 
+		# - Read data
 		data= hdu[0].data
 		data_size= np.shape(data)
 		nchan= len(data.shape)
@@ -123,12 +136,34 @@ class Utils(object):
 			output_data= data	
 		else:
 			errmsg= 'Invalid/unsupported number of channels found in file ' + filename + ' (nchan=' + str(nchan) + ')!'
-			logging.error(errmsg)
+			#cls._logger.error(errmsg)
+			logger.error(errmsg)
 			hdu.close()
 			raise IOError(errmsg)
 
+		# - Read metadata
+		header= hdu[0].header
+
+		# - Close file
 		hdu.close()
 
-		return output_data
+		return output_data, header
+
+	
+	@classmethod
+	def crop_img(cls,data,x0,y0,dx,dy):
+		""" Extract sub image of size (dx,dy) around pixel (x0,y0) """
+
+		#- Extract crop data
+		xmin= int(x0-dx/2)
+		xmax= int(x0+dx/2)
+		ymin= int(y0-dy/2)
+		ymax= int(y0+dy/2)		
+		crop_data= data[ymin:ymax,xmin:xmax]
+	
+		#- Replace NAN with zeros and inf with large numbers
+		np.nan_to_num(crop_data,False)
+
+		return crop_data
 
 
