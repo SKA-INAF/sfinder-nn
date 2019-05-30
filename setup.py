@@ -27,10 +27,11 @@ reqs = ['numpy>=1.10',
         'future']
 
 
-#if sys.version_info < (2, 7):
-#	reqs.append('lmfit==0.9.1')
-#else:
-#	reqs.append('lmfit>=0.9.2')
+if sys.version_info <= (2, 7):
+	reqs.append('future')
+	reqs.append('scikit-learn<=0.20')
+else:
+	reqs.append('scikit-learn')
 
 data_dir = 'data'
 
