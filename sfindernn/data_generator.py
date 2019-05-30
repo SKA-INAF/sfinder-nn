@@ -19,14 +19,18 @@ import random
 import math
 import logging
 
-## ADDON ML MODULES
-from sklearn.model_selection import train_test_split
+## ASTRO MODULES
+from astropy.modeling.models import Box2D, Gaussian2D
 
 ## PACKAGE MODULES
-#from . import logger
 from .utils import Utils
 
+##############################
+##     GLOBAL VARS
+##############################
 logger = logging.getLogger(__name__)
+SIGMA_TO_FWHM= np.sqrt(8*np.log(2))
+
 
 ##############################
 ##     CLASS DEFINITIONS
@@ -37,7 +41,8 @@ class DataGenerator(object):
 			Attributes:
 				None
 	"""
-
+	
+	
 	def __init__(self):
 		""" Return a DataGenerator object """
 		
@@ -215,7 +220,10 @@ class DataGenerator(object):
 			# - Save crop img to file?
 			outfilename= 'train_bkg-RUN' + str(index+1) + '.fits'
 			if writeimg:
-				self.write_fits(data_crop,outfilename)
+				Utils.write_fits(data_crop,outfilename)
+
+			# Update sample counter
+			index+= 1
 
 		return 0
 
@@ -300,7 +308,7 @@ class DataGenerator(object):
 
 		while index < self.nsamples_source:
 			if index%100==0 :
-				logger.info("Generating source train image no. %s/%s ..." % (index+1,self.nsamples_source))
+				logger.info("Generating source train image no. %d/%s ..." % (index+1,self.nsamples_source))
 	
 			if self.gen_bkg_from_img:
 				# - Generate crop img center randomly
@@ -336,7 +344,7 @@ class DataGenerator(object):
 			source_pars= []
 			nsources= 0
 
-			logger.info("Generating #%d sources in image ..." % (nsources_max))
+			#logger.info("Generating #%d sources in image ..." % (nsources_max))
 
 			while nsources < nsources_max:
 				# Generate source position
@@ -384,7 +392,7 @@ class DataGenerator(object):
 				theta_rad= np.radians(theta)
 
 				## Generate gaus 2D data
-				logger.info("Generating source no. %d: (x0,y0,S,sigmax,sigmay,theta)=(%s,%s,%s,%s,%s,%s)" % (nsources,x0_source,y0_source,S,sigmax,sigmay,theta))
+				logger.info("Generating source no. %d: (x0,y0,S,sigmax,sigmay,theta)=(%s,%s,%s,%s,%s,%s)" % (nsources+1,x0_source,y0_source,S,sigmax,sigmay,theta))
 				blob_data= self.generate_blob(ampl=S,x0=x0_source,y0=y0_source,sigmax=sigmax,sigmay=sigmay,theta=theta,trunc_thr=self.trunc_thr)
 				if blob_data is None:
 					logger.warn("Failed to generate Gaus2D (hint: too large trunc threshold), skip and regenerate...")
@@ -405,8 +413,8 @@ class DataGenerator(object):
 			outfilename= 'train_source-RUN' + str(index+1) + '.fits'
 			outfilename_pars= 'train_source_pars-RUN' + str(index+1) + '.dat'
 			if writeimg:
-				self.write_fits(data_crop,outfilename)
-				self.write_ascii(np.array(source_pars),outfilename_pars,'# sname x0(pix) y0(pix) S(Jy/beam) sigmaX(pix) sigmaY(pix) theta(rad)')
+				Utils.write_fits(data_crop,outfilename)
+				Utils.write_ascii(np.array(source_pars),outfilename_pars,'# sname x0(pix) y0(pix) S(Jy/beam) sigmaX(pix) sigmaY(pix) theta(rad)')
 	
 
 			# Update sample counter
@@ -430,13 +438,13 @@ class DataGenerator(object):
 
 		# - Generate train data for bkg
 		logger.info("Generating train data for bkg ...")
-		status= self.make_bkg_train_data(self.writeimg)
+		status= self.make_bkg_train_data(True)
 		if status<0:
 			return -1	
 
 		# - Generate train data for sources
 		logger.info("Generating train data for sources ...")
-		status= self.make_source_train_data(self.writeimg)
+		status= self.make_source_train_data(True)
 		if status<0:
 			return -1	
 

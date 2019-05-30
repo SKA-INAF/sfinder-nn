@@ -94,7 +94,7 @@ class Utils(object):
 				continue
 
 			# Skip pattern
-			skipline= has_patterns_in_string(line_fields[0],skip_patterns)
+			skipline= cls.has_patterns_in_string(line_fields[0],skip_patterns)
 			if skipline:
 				continue 		
 
