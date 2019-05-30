@@ -22,15 +22,18 @@ reqs = ['numpy>=1.10',
         'astropy>=2.0, <3',
         'matplotlib',
         'keras>=2.0',
-        'tensorflow>=1.13',
-        'scikit-learn',
-        'future']
+        'tensorflow>=1.13']
 
+PY_MAJOR_VERSION=sys.version_info.major
+PY_MINOR_VERSION=sys.version_info.minor
+print("PY VERSION: maj=%s, min=%s" % (PY_MAJOR_VERSION,PY_MINOR_VERSION))
 
-if sys.version_info <= (2, 7):
+if PY_MAJOR_VERSION<=2:
+	print("PYTHON 2 detected")
 	reqs.append('future')
 	reqs.append('scikit-learn<=0.20')
 else:
+	print("PYTHON 3 detected")
 	reqs.append('scikit-learn')
 
 data_dir = 'data'
