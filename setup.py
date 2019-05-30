@@ -20,7 +20,6 @@ def get_version():
 
 reqs = ['numpy>=1.10',
         'astropy>=2.0, <3',
-        'matplotlib',
         'keras>=2.0',
         'tensorflow>=1.13']
 
@@ -31,10 +30,14 @@ print("PY VERSION: maj=%s, min=%s" % (PY_MAJOR_VERSION,PY_MINOR_VERSION))
 if PY_MAJOR_VERSION<=2:
 	print("PYTHON 2 detected")
 	reqs.append('future')
+	reqs.append('scipy<=1.2.1')
 	reqs.append('scikit-learn<=0.20')
+	reqs.append('matplotlib<=2.2.4')
 else:
 	print("PYTHON 3 detected")
+	reqs.append('scipy')
 	reqs.append('scikit-learn')
+	reqs.append('matplotlib')
 
 data_dir = 'data'
 
@@ -49,7 +52,7 @@ setup(
 	long_description=read('README.md'),
 	packages=['sfindernn'],
 	install_requires=reqs,
-	scripts=['scripts/generate_data.py','scripts/train_nn.py','test/test_train.sh','test/test_gendata.sh'],
+	scripts=['scripts/generate_data.py','scripts/train_nn.py','scripts/create_filelist.sh','test/test_train.sh','test/test_gendata.sh'],
 	#data_files=[('sfindernn', [os.path.join(data_dir, 'MOC.fits')]) ],
 	#setup_requires=['pytest-runner'],
 	#tests_require=['pytest', 'nose']
