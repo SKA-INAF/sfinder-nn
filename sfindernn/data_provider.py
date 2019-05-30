@@ -55,7 +55,9 @@ class DataProvider(object):
 		self.nx= 0
 		self.ny= 0	
 		self.inputs_bkg= None
-		self.inputs_source= None		
+		self.inputs_source= None
+		self.inputs_train= None
+		self.inputs_test= None		
 		
 		# - Target data and size
 		self.nobjects= nobjs
@@ -74,8 +76,7 @@ class DataProvider(object):
 		self.normalize_inputs= True
 		self.normmin= 0.001
 		self.normmax= 10
-		self.inputs_train= None
-		self.inputs_test= None
+		
 
 		# - Target data normalization
 		self.normalize_targets= False
@@ -106,10 +107,34 @@ class DataProvider(object):
 		""" Set test sample proportion """
 		self.test_size= f
 
+	def get_img_size(self):
+		""" Return the train image size """
+		return self.nx, self.ny
+
+	def get_input_data(self):
+		""" Return the train & test input data """
+		return self.inputs_train, self.inputs_test
+
+	def get_target_data(self):
+		""" Return the train & test target data """
+		return self.outputs_train, self.outputs_test
+
+	def get_target_label_data(self):
+		""" Return the train & test target label data """
+		return self.outputs_labels_train, self.outputs_labels_test
+
+	def get_nobjects(self):
+		""" Return the number of objects to be used in training """
+		return self.nobjects
+
+	def get_npars(self):
+		""" Return the number of source pars to be used in training """
+		return self.npars
+	
 	#################################
 	##     READ BKG TRAIN DATA
 	#################################
-	def read_bkg_train_data(self,filelist):
+	def __read_bkg_train_data(self,filelist):
 		""" Read background train data """
 		
 		# - Init data
@@ -201,7 +226,7 @@ class DataProvider(object):
 	#################################
 	##     READ SOURCE TRAIN DATA
 	#################################
-	def read_source_train_data(self,filelist,filelist_pars):
+	def __read_source_train_data(self,filelist,filelist_pars):
 		""" Read source train data """
 				
 		# - Init data
@@ -360,13 +385,13 @@ class DataProvider(object):
 		
 		# - Read train data for bkg
 		logger.info("Reading train data for bkg ...")
-		status= self.read_bkg_train_data(self.img_bkg_filelist)
+		status= self.__read_bkg_train_data(self.img_bkg_filelist)
 		if status<0:
 			return -1
 
 		# - Read train data for source
 		logger.info("Reading train data for source ...")
-		status= self.read_source_train_data(self.img_source_filelist,self.sourcepars_filelist)
+		status= self.__read_source_train_data(self.img_source_filelist,self.sourcepars_filelist)
 		if status<0:
 			return -1
 
