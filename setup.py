@@ -32,11 +32,13 @@ if PY_MAJOR_VERSION<=2:
 	reqs.append('future')
 	reqs.append('scipy<=1.2.1')
 	reqs.append('scikit-learn<=0.20')
+	reqs.append('pyparsing>=2.0.1')
 	reqs.append('matplotlib<=2.2.4')
 else:
 	print("PYTHON 3 detected")
 	reqs.append('scipy')
 	reqs.append('scikit-learn')
+	reqs.append('pyparsing')
 	reqs.append('matplotlib')
 
 data_dir = 'data'
