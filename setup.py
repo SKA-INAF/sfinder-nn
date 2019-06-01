@@ -18,14 +18,19 @@ def get_version():
 	return sfindernn.__version__
 
 
-reqs = ['numpy>=1.10',
-        'astropy>=2.0, <3',
-        'keras>=2.0',
-        'tensorflow>=1.13']
+#reqs = ['numpy>=1.10',
+#        'astropy>=2.0, <3',
+#        'keras>=2.0',
+#        'tensorflow>=1.13']
 
 PY_MAJOR_VERSION=sys.version_info.major
 PY_MINOR_VERSION=sys.version_info.minor
 print("PY VERSION: maj=%s, min=%s" % (PY_MAJOR_VERSION,PY_MINOR_VERSION))
+
+reqs= []
+reqs.append('numpy>=1.10')
+reqs.append('astropy>=2.0, <3')
+
 
 if PY_MAJOR_VERSION<=2:
 	print("PYTHON 2 detected")
@@ -40,6 +45,10 @@ else:
 	reqs.append('scikit-learn')
 	reqs.append('pyparsing')
 	reqs.append('matplotlib')
+
+reqs.append('keras>=2.0')
+reqs.append('tensorflow>=1.13')
+
 
 data_dir = 'data'
 
