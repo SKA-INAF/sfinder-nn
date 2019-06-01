@@ -346,6 +346,9 @@ class DataGenerator(object):
 
 			#logger.info("Generating #%d sources in image ..." % (nsources_max))
 
+			print("data_crop shape=",data_crop.shape)
+			print("sources_data shape=",sources_data.shape)
+
 			while nsources < nsources_max:
 				# Generate source position
 				x0_source= np.random.uniform(marginx_source,self.train_img_sizex-marginx_source-1)
