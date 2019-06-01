@@ -437,4 +437,21 @@ class DataProvider(object):
 		logger.debug("outputs_labels_test size=", np.shape(self.outputs_labels_test))
 
 		return 0
+
+	def draw_train_inputs(self,nbins=30,logscale=True):
+		""" Draw input train data """
+		Utils.draw_histo(self.inputs_train,nbins,logscale)
+
+	def draw_test_inputs(self,nbins=30,logscale=True):
+		""" Draw input test data """
+		Utils.draw_histo(self.inputs_test,nbins,logscale)
+
+	def draw_train_outputs(self,nbins=30,logscale=True):
+		""" Draw output train data """
+		Utils.draw_histo(self.outputs_train,nbins,logscale)
+
+	def draw_test_outputs(self,nbins=30,logscale=True):
+		""" Draw output train data """
+		Utils.draw_histo(self.outputs_test,nbins,logscale)
 		
+

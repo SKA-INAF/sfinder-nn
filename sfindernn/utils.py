@@ -10,8 +10,11 @@ import string
 import logging
 import numpy as np
 
-## ASTRO
+## ASTRO MODULES
 from astropy.io import fits
+
+## GRAPHICS MODULES
+import matplotlib.pyplot as plt
 
 
 logger = logging.getLogger(__name__)
@@ -165,5 +168,31 @@ class Utils(object):
 		np.nan_to_num(crop_data,False)
 
 		return crop_data
+
+	@classmethod
+	def draw_histo(cls,data,nbins=100,logscale=False):
+		""" Draw input array histogram """
+
+		# - Do nothing if data is empty
+		if data.ndim<=0:
+			return
+
+		# - Flatten array 
+		x= data.flatten()
+
+		# - Set histogram from data
+		hist, bins = np.histogram(x, bins=nbins)
+		width = 0.7 * (bins[1] - bins[0])
+		center = (bins[:-1] + bins[1:]) / 2
+
+		# - Draw plots
+		plt.bar(center, hist, align='center', width=width)
+		if logscale:
+			plt.yscale('log')
+
+		plt.show()
+
+
+
 
 
