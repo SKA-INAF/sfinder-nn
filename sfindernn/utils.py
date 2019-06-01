@@ -162,7 +162,7 @@ class Utils(object):
 		xmax= int(x0+dx/2)
 		ymin= int(y0-dy/2)
 		ymax= int(y0+dy/2)		
-		crop_data= data[ymin:ymax,xmin:xmax]
+		crop_data= data[ymin:ymax+1,xmin:xmax+1]
 	
 		#- Replace NAN with zeros and inf with large numbers
 		np.nan_to_num(crop_data,False)
