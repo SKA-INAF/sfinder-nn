@@ -77,7 +77,6 @@ class DataProvider(object):
 		self.normmin= 0.001
 		self.normmax= 10
 		
-
 		# - Target data normalization
 		self.normalize_targets= False
 		self.theta_min= -90
@@ -90,10 +89,18 @@ class DataProvider(object):
 	#################################
 	##     SETTERS/GETTERS
 	#################################
+	def enable_inputs_normalization(self,choice):
+		""" Turn on/off inputs normalization """
+		self.normalize_inputs= choice
+
 	def set_input_data_norm_range(self,datamin,datamax):
 		""" Set input data normalization range """
 		self.normmin= datamin
 		self.normmax= datamax
+
+	def enable_targets_normalization(self,choice):
+		""" Turn on/off target normalization """
+		self.normalize_targets= choice
 		
 	def set_nobjects(self,n):
 		""" Set maximum number of detected object in image """

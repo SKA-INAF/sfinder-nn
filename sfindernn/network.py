@@ -62,7 +62,6 @@ class Network(object):
 				- 
 	"""
 	
-	
 	def __init__(self,nnarc_filename,data_provider):
 		""" Return a Network object """
 
@@ -94,7 +93,7 @@ class Network(object):
 		self.optimizer= 'rmsprop'
 		self.learning_rate= 1.e-4
 		self.nepochs= 10
-		self.spars_loss_weight= 1
+		self.pars_loss_weight= 1
 		self.labels_loss_weight= 1
 
 		# - Neural Net results
@@ -116,9 +115,9 @@ class Network(object):
 	#####################################
 	##     SETTERS/GETTERS
 	#####################################
-	def set_spars_loss_weight(self,w):
+	def set_pars_loss_weight(self,w):
 		""" Set source par loss weight """
-		self.spars_loss_weight= w
+		self.pars_loss_weight= w
 
 	def set_labels_loss_weight(self,w):
 		""" Set source labels loss weight """
@@ -241,7 +240,7 @@ class Network(object):
 		binaryCE = keras.metrics.binary_crossentropy(y_true_type,y_pred_type)
 
 		# - Compute total loss as weighted sum of MSE + binaryCE		
-		tot= self.spars_loss_weight*mse + self.labels_loss_weight*binaryCE
+		tot= self.pars_loss_weight*mse + self.labels_loss_weight*binaryCE
 		#tot= mse
 	
 		return tot
@@ -367,7 +366,7 @@ class Network(object):
 		}
 		lossWeights = {
 			"type": self.labels_loss_weight,
-			"pars": self.spars_loss_weight
+			"pars": self.pars_loss_weight
 		}
 
 		#self.model.compile(optimizer=opt,loss=losses, loss_weights=lossWeights, metrics=['accuracy'])
@@ -679,8 +678,12 @@ class Network(object):
 			nobjs_rec_true+= nrec_true 
 			nobjs_rec_false+= nrec_false
 
-		completeness_train= float(nobjs_true)/float(nobjs_tot)
-		reliability_train= float(nobjs_rec_true)/float(nobjs_rec)
+		completeness_train= 0
+		reliability_train= 0
+		if nobjs_tot>0:	
+			completeness_train= float(nobjs_true)/float(nobjs_tot)
+		if nobjs_rec>0:
+			reliability_train= float(nobjs_rec_true)/float(nobjs_rec)
 
 		logger.info("NN Train Results: Completeness(det/tot=%d/%d)=%s, Reliability(true/rec=%d/%d)=%s" % (nobjs_true,nobjs_tot,str(completeness_train),nobjs_rec_true,nobjs_rec,str(reliability_train)))
 
@@ -766,8 +769,14 @@ class Network(object):
 			nobjs_rec_true+= nrec_true 
 			nobjs_rec_false+= nrec_false
 
-		completeness_test= float(nobjs_true)/float(nobjs_tot)
-		reliability_test= float(nobjs_rec_true)/float(nobjs_rec)
+		#logger.info("NN Test Results: nobjs_true=%d, nobjs_tot=%d, nobjs_rec_true=%d, nobjs_rec=%d" % (nobjs_true,nobjs_tot,nobjs_rec_true,nobjs_rec))
+
+		completeness_test= 0
+		reliability_test= 0
+		if nobjs_tot>0:
+			completeness_test= float(nobjs_true)/float(nobjs_tot)
+		if nobjs_rec>0:
+			reliability_test= float(nobjs_rec_true)/float(nobjs_rec)
 
 		logger.info("NN Test Results: Completeness(det/tot=%d/%d)=%s, Reliability(true/rec=%d/%d)=%s" % (nobjs_true,nobjs_tot,str(completeness_test),nobjs_rec_true,nobjs_rec,str(reliability_test)))
 
@@ -890,8 +899,91 @@ class Network(object):
 		plt.savefig(self.outfile_fluxaccuracy)
 		plt.close()
 	
+		#===================================
+		#==   PLOT CONV LAYER ACTIVATIONS
+		#===================================
+		#logger.info("Plot the convolution layer activations ...")
+		#self.__draw_conv_layer_activations(self.inputs_train)
 
 		return 0
+
+	#########################################
+	##     DRAW NN CONV LAYER ACTIVATIONS
+	#########################################
+	def __draw_conv_layer_activations(self,inputs):
+		""" Draw convolution layer activations for a given input """
+
+		# - Create activation model	
+		layer_name= None
+		layer_outputs = [layer.output for layer in self.model.layers if layer.name == layer_name or layer_name is None][1:]
+
+		activation_model= models.Model(inputs=self.model.input, outputs=layer_outputs)
+
+		# - Get layer names
+		layer_names = []
+		for layer in self.model.layers:
+			layer_names.append(layer.name)
+
+		logger.info("== NN Layer names ==")
+		print(layer_names)
+
+		# - Get activations
+		activations= activation_model.predict(inputs)
+		images_per_row = 16
+
+		for layer_name, layer_activation in zip(layer_names, activations):
+
+			# Skip input layer
+			if layer_name=='input':
+				continue
+
+			# Draw only conv layers
+			if layer_activation.ndim!=4:
+				continue
+
+			n_features = layer_activation.shape[-1]
+			size = layer_activation.shape[1]
+			n_cols = n_features # images_per_row
+
+			logger.info("layer_name=%s, n_features=%d, size=%d, n_cols=%d" % (layer_name,n_features,size,n_cols))
+		
+
+			# - Fill channel image
+			channel_images= []
+			for index in range(n_features):
+				channel_image = layer_activation[0,:,:, index]
+				channel_images.append(channel_image)
+
+			# - Organize images in a grid
+			nimg_row= int(np.sqrt(n_features))
+			nimg_col= int(np.ceil(n_features/float(nimg_row)))
+			logger.info("Organize %d feature maps in pretty image of size (%d,%d)" % (n_features,nimg_row,nimg_col))
+
+			display_grid = np.zeros((size*nimg_col, size*nimg_row))
+		
+			for col in range(nimg_col):
+				for row in range(nimg_row):
+					index= col * nimg_row + row
+					if index>=n_features:
+						continue
+					logger.debug("Filling image at index=%d (col=%d, row=%d)" % (index,col,row))
+					channel_image= channel_images[index]
+					display_grid[col * size : (col + 1) * size, row * size : (row + 1) * size] = channel_image
+			
+		
+			# - Draw plots
+			fig_name= 'act_layer' + layer_name + '.png' 
+
+			scale = 1. / size
+			plt.figure(figsize=(scale * display_grid.shape[1],scale * display_grid.shape[0]))
+			plt.title(layer_name)
+			plt.grid(False)
+			#plt.imshow(display_grid, aspect='auto', cmap='viridis')
+			#plt.show()
+			plt.tight_layout()
+			plt.savefig(fig_name)
+			plt.close()
+
 
 	#####################################
 	##     RUN NN TRAIN
