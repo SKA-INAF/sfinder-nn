@@ -28,7 +28,7 @@ import collections
 from sfindernn import __version__, __date__
 from sfindernn import logger
 from sfindernn.data_provider import DataProvider
-from sfindernn.network import Network
+from sfindernn.network import NNTrainer
 
 
 #### GET SCRIPT ARGS ####
@@ -184,7 +184,7 @@ def main():
 	#==   TRAIN NN
 	#===========================
 	logger.info("Running NN training ...")
-	nn= Network(nnarcfile,dp)
+	nn= NNTrainer(nnarcfile,dp)
 
 	nn.set_optimizer(optimizer)
 	nn.set_learning_rate(learning_rate)

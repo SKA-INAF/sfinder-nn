@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 ##############################
 ##     CLASS DEFINITIONS
 ##############################
-class Network(object):
+class NNTrainer(object):
 	""" Class to create and train a neural net
 
 			Arguments:
@@ -97,7 +97,11 @@ class Network(object):
 		self.labels_loss_weight= 1
 
 		# - Neural Net results
+		self.train_type_loss_vs_epoch= None
+		self.train_pars_loss_vs_epoch= None
 		self.train_loss_vs_epoch= None
+		self.test_type_loss_vs_epoch= None
+		self.test_pars_loss_vs_epoch= None
 		self.test_loss_vs_epoch= None
 		self.train_accuracy_vs_epoch= None
 		self.test_accuracy_vs_epoch= None
@@ -213,6 +217,45 @@ class Network(object):
 		return 0
 
 	#####################################
+	##     NN METRICS
+	#####################################
+	def __mse_metric(self,y_true,y_pred):
+		""" Define MSE metric"""
+		
+		# - Extract tensors relative to pars
+		y_true_type= y_true[:,:self.nobjects]
+		y_pred_type= y_pred[:,:self.nobjects]
+		
+		# - Extract tensors relative to parameters
+		y_true_pars= y_true[:,self.nobjects:]
+		y_pred_pars= y_pred[:,self.nobjects:]
+
+		# - Replicate true labels to have a tensor of size (N,nobjects*npars)
+		#   This is multiplied by pars so that objects with label=0 are not entering in pars MSE computation (they sum zero)
+		w= K.repeat_elements(y_true_type,self.npars,axis=1)
+		
+		# - Count number of objects
+		N= tf.count_nonzero(y_true_type,dtype=tf.dtypes.float32)
+		
+		# - Compute MSE for pars relative to target objects (not background)
+		mse= K.sum(K.square( w*(y_pred_pars - y_true_pars) ), axis=-1)/N
+		
+		return mse
+
+	
+	def __classification_metric(self,y_true,y_pred):
+		""" Define classification metric"""
+		
+		# - Extract tensors relative to pars
+		y_true_type= y_true[:,:self.nobjects]
+		y_pred_type= y_pred[:,:self.nobjects]
+		
+		# - Compute binary crossentropy for labels
+		binaryCE = keras.metrics.binary_crossentropy(y_true_type,y_pred_type)
+
+		return binaryCE
+
+	#####################################
 	##     NN LOSS FUNCTION FOR PARS
 	#####################################
 	def __tot_loss(self,y_true,y_pred):
@@ -242,7 +285,21 @@ class Network(object):
 		# - Compute total loss as weighted sum of MSE + binaryCE		
 		tot= self.pars_loss_weight*mse + self.labels_loss_weight*binaryCE
 		#tot= mse
-	
+
+		#tf.Print(input_=mse, data=[mse], message='mse= ')
+		#tf.Print(input_=binaryCE, data=[binaryCE], message='binaryCE= ')
+		#tf.print('mse= ',mse,output_stream=sys.stdout)
+		#tf.print('binaryCE= ',binaryCE,output_stream=sys.stdout)
+		
+		#input1 = K.constant(mse)
+		#input2 = K.constant(binaryCE)
+		#node = tf.add(input1, input2)
+		#K.print_tensor(node)
+		
+		#sess = tf.InteractiveSession()
+		#print("mse/binaryCE= ", node.eval())
+		#sess.close()
+
 		return tot
 
 
@@ -370,7 +427,7 @@ class Network(object):
 		}
 
 		#self.model.compile(optimizer=opt,loss=losses, loss_weights=lossWeights, metrics=['accuracy'])
-		self.model.compile(optimizer=opt,loss=self.__tot_loss, metrics=['accuracy'])
+		self.model.compile(optimizer=opt,loss=self.__tot_loss, metrics=['accuracy',self.__classification_metric,self.__mse_metric])
 		
 		return 0
 	
@@ -484,7 +541,11 @@ class Network(object):
 
 		# - Initialize train/test loss vs epoch
 		self.train_loss_vs_epoch= np.zeros((1,self.nepochs))	
+		self.train_type_loss_vs_epoch= np.zeros((1,self.nepochs))	
+		self.train_pars_loss_vs_epoch= np.zeros((1,self.nepochs))	
 		self.test_loss_vs_epoch= np.zeros((1,self.nepochs))
+		self.test_type_loss_vs_epoch= np.zeros((1,self.nepochs))
+		self.test_pars_loss_vs_epoch= np.zeros((1,self.nepochs))
 		self.train_accuracy_vs_epoch= np.zeros((1,self.nepochs))
 		self.test_accuracy_vs_epoch= np.zeros((1,self.nepochs))
 		deltaLoss_train= 0
@@ -508,8 +569,14 @@ class Network(object):
 			)
 
 			# - Save epoch loss
+			#print (self.fitout.history)
+			
 			loss_train= self.fitout.history['loss'][0]
+			type_loss_train= self.fitout.history['__classification_metric'][0]
+			pars_loss_train= self.fitout.history['__mse_metric'][0]
 			loss_test= self.fitout.history['val_loss'][0]
+			type_loss_test= self.fitout.history['val___classification_metric'][0]
+			pars_loss_test= self.fitout.history['val___mse_metric'][0]
 			accuracy_train= self.fitout.history['acc'][0]
 			accuracy_test= self.fitout.history['val_acc'][0]
 			if epoch>=1:
@@ -518,9 +585,12 @@ class Network(object):
 				deltaAcc_train= (accuracy_train/self.train_accuracy_vs_epoch[0,epoch-1]-1)*100.
 				deltaAcc_test= (accuracy_test/self.test_accuracy_vs_epoch[0,epoch-1]-1)*100.
 
-			#print (self.fitout.history)
 			self.train_loss_vs_epoch[0,epoch]= loss_train
+			self.train_type_loss_vs_epoch[0,epoch]= type_loss_train
+			self.train_pars_loss_vs_epoch[0,epoch]= pars_loss_train
 			self.test_loss_vs_epoch[0,epoch]= loss_test
+			self.test_type_loss_vs_epoch[0,epoch]= type_loss_test
+			self.test_pars_loss_vs_epoch[0,epoch]= pars_loss_test
 			self.train_accuracy_vs_epoch[0,epoch]= accuracy_train
 			self.test_accuracy_vs_epoch[0,epoch]= accuracy_test
 			
@@ -578,11 +648,11 @@ class Network(object):
 		epoch_ids= epoch_ids.reshape(N,1)
 
 		metrics_data= np.concatenate(
-			(epoch_ids,self.train_loss_vs_epoch.reshape(N,1),self.test_loss_vs_epoch.reshape(N,1),self.train_accuracy_vs_epoch.reshape(N,1),self.test_accuracy_vs_epoch.reshape(N,1)),
+			(epoch_ids,self.train_type_loss_vs_epoch.reshape(N,1),self.train_pars_loss_vs_epoch.reshape(N,1),self.train_loss_vs_epoch.reshape(N,1),self.test_type_loss_vs_epoch.reshape(N,1),self.test_pars_loss_vs_epoch.reshape(N,1),self.test_loss_vs_epoch.reshape(N,1),self.train_accuracy_vs_epoch.reshape(N,1),self.test_accuracy_vs_epoch.reshape(N,1)),
 			axis=1
 		)
 			
-		head= '# epoch - tot loss - type loss - pars loss - tot loss (test) - type loss (test) - pars loss (test) - type acc - pars acc - type acc (test) - pars acc (test)'
+		head= '# epoch - type loss - pars loss - tot loss - type loss (test) - pars loss (test) - tot loss (test) - accuracy - accuracy (test)'
 		Utils.write_ascii(metrics_data,self.outfile_nnout_metrics,head)	
 
 		
@@ -802,17 +872,41 @@ class Network(object):
 		logger.info("Plot the network loss metric to file ...")
 		lossNames = ["loss"]
 		plt.style.use("ggplot")
-		(fig, ax) = plt.subplots(1, 1, figsize=(20,20),squeeze=False)
+		#(fig, ax) = plt.subplots(1, 1, figsize=(20,20),squeeze=False)
+		(fig, ax) = plt.subplots(3, 1, figsize=(20,20))
 		
-		for (i, lossName) in enumerate(lossNames):
-			# Plot the loss for both the training and validation data
-			title = "Loss for {}".format(lossName) if lossName != "loss" else "Total loss"
-			ax[i,0].set_title(title)
-			ax[i,0].set_xlabel("Epoch #")
-			ax[i,0].set_ylabel("Loss")
-			ax[i,0].plot(np.arange(0, self.nepochs), self.train_loss_vs_epoch[i], label="TRAIN SAMPLE - " + lossName)
-			ax[i,0].plot(np.arange(0, self.nepochs), self.test_loss_vs_epoch[i], label="TEST SAMPLE - " + lossName)
-			ax[i,0].legend()
+		# Total loss
+		ax[0].set_title("Total Loss")
+		ax[0].set_xlabel("Epoch #")
+		ax[0].set_ylabel("Loss")
+		ax[0].plot(np.arange(0, self.nepochs), self.train_loss_vs_epoch[0], label="TRAIN SAMPLE")
+		ax[0].plot(np.arange(0, self.nepochs), self.test_loss_vs_epoch[0], label="TEST SAMPLE")
+		ax[0].legend()		
+
+		# Type loss
+		ax[1].set_title("Classification Loss")
+		ax[1].set_xlabel("Epoch #")
+		ax[1].set_ylabel("Loss")
+		ax[1].plot(np.arange(0, self.nepochs), self.train_type_loss_vs_epoch[0], label="TRAIN SAMPLE")
+		ax[1].plot(np.arange(0, self.nepochs), self.test_type_loss_vs_epoch[0], label="TEST SAMPLE")
+		ax[1].legend()
+
+		# Pars loss
+		ax[2].set_title("Pars Loss")
+		ax[2].set_xlabel("Epoch #")
+		ax[2].set_ylabel("Loss")
+		ax[2].plot(np.arange(0, self.nepochs), self.train_pars_loss_vs_epoch[0], label="TRAIN SAMPLE")
+		ax[2].plot(np.arange(0, self.nepochs), self.test_pars_loss_vs_epoch[0], label="TEST SAMPLE")
+		ax[2].legend()	
+
+		#for (i, lossName) in enumerate(lossNames):
+		#	title = "Loss for {}".format(lossName) if lossName != "loss" else "Total loss"
+		#	ax[i,0].set_title(title)
+		#	ax[i,0].set_xlabel("Epoch #")
+		#	ax[i,0].set_ylabel("Loss")
+		#	ax[i,0].plot(np.arange(0, self.nepochs), self.train_loss_vs_epoch[i], label="TRAIN SAMPLE - " + lossName)
+		#	ax[i,0].plot(np.arange(0, self.nepochs), self.test_loss_vs_epoch[i], label="TEST SAMPLE - " + lossName)
+		#	ax[i,0].legend()
 
 		plt.tight_layout()
 		plt.savefig(self.outfile_loss)
