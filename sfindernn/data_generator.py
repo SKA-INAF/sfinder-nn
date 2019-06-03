@@ -346,8 +346,8 @@ class DataGenerator(object):
 
 			#logger.info("Generating #%d sources in image ..." % (nsources_max))
 
-			print("data_crop shape=",data_crop.shape)
-			print("sources_data shape=",sources_data.shape)
+			#print("data_crop shape=",data_crop.shape)
+			#print("sources_data shape=",sources_data.shape)
 
 			while nsources < nsources_max:
 				# Generate source position

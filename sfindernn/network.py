@@ -772,6 +772,7 @@ class NNTrainer(object):
 
 					for index in range(self.nobjects):
 						obj_data= []
+						obj_data.append(n)
 						obj_data.append(target[index])
 						obj_data.append(pred[index])
 						for k in range(self.npars):
@@ -837,6 +838,7 @@ class NNTrainer(object):
 
 					for index in range(self.nobjects):
 						obj_data= []
+						obj_data.append(n)
 						obj_data.append(target[index])
 						obj_data.append(pred[index])
 			
@@ -909,7 +911,7 @@ class NNTrainer(object):
 					
 		# - Write ascii file with results
 		logger.info("Writing ascii file with NN performances on train data ...")
-		Utils.write_ascii(np.array(nnout_train),self.outfile_nnout_train,'# target label - predicted label - target pars - predicted pars')	
+		Utils.write_ascii(np.array(nnout_train),self.outfile_nnout_train,'# nobjects - target label - predicted label - target pars - predicted pars')	
 
 
 
@@ -1053,6 +1055,7 @@ class NNTrainer(object):
 		
 					for index in range(self.nobjects):
 						obj_data= []
+						obj_data.append(n)
 						obj_data.append(target[index])
 						obj_data.append(pred[index])
 						for k in range(self.npars):
@@ -1118,6 +1121,7 @@ class NNTrainer(object):
 		
 					for index in range(self.nobjects):
 						obj_data= []
+						obj_data.append(n)
 						obj_data.append(target[index])
 						obj_data.append(pred[index])
 						
@@ -1191,13 +1195,7 @@ class NNTrainer(object):
 
 		# - Write ascii file with results
 		logger.info("Write ascii file with NN performances on test data ...")
-		Utils.write_ascii(np.array(nnout_test),self.outfile_nnout_test,'# target label - predicted label - target pars - predicted pars')	
-
-
-
-
-
-
+		Utils.write_ascii(np.array(nnout_test),self.outfile_nnout_test,'# nobjects - target label - predicted label - target pars - predicted pars')	
 
 
 
