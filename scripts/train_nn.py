@@ -74,6 +74,10 @@ def get_args():
 	parser.set_defaults(flip_train=False)
 	parser.add_argument('--flip_test', dest='flip_test', action='store_true',help='Flip object test input data during training according to best MSE match with targets')	
 	parser.set_defaults(flip_test=False)
+	parser.add_argument('--no-classification', dest='no_classification', action='store_true',help='Disable learning of input labels in training')	
+	parser.set_defaults(no_classification=False)
+	parser.add_argument('--no-regression', dest='no_regression', action='store_true',help='Disable learning of input pars in training')	
+	parser.set_defaults(no_regression=False)
 
 
 	# - Output options
@@ -124,7 +128,7 @@ def main():
 	filelist_sourcepars= args.filelist_sourcepars
 	nnarcfile= args.nnarcfile
 
-	# - Trai data options
+	# - Train data options
 	normalize_targets= args.normalize_targets
 	normalize_inputs= args.normalize_inputs
 	normdatamin= args.normdatamin
@@ -141,6 +145,12 @@ def main():
 	nepochs= args.nepochs
 	flip_train= args.flip_train
 	flip_test= args.flip_test
+	learn_labels= True
+	learn_pars= True
+	if args.no_classification:
+		learn_labels= False
+	if args.no_regression:
+		learn_pars= False
 	
 	# - Output file
 	outfile_loss= args.outfile_loss
@@ -193,7 +203,9 @@ def main():
 	nn.set_nepochs(nepochs)
 	nn.enable_train_data_flip(flip_train)
 	nn.enable_test_data_flip(flip_test)
-
+	nn.enable_labels_learning(learn_labels)
+	nn.enable_pars_learning(learn_pars)
+	
 	nn.set_outfile_loss(outfile_loss)
 	nn.set_outfile_accuracy(outfile_accuracy)	
 	nn.set_outfile_model(outfile_model)
