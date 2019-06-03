@@ -358,10 +358,10 @@ class DataGenerator(object):
 				
 				# Skip if pixel already filled by a source or if crop data is nan
 				if mask_data[iy,ix]!=0:
-					logger.warn("Generated source position (%s,%s) is already taken (mask=%s) in image crop centered on (%s,%s), skip generation..." % (x0_source,y0_source,mask_data[iy,ix],x0,y0))
+					logger.warn("Generated source position (%s,%s) is already taken (mask=%s), skip generation..." % (x0_source,y0_source,mask_data[iy,ix]))
 					continue
 				if data_crop[iy,ix]==0 or np.isnan(data_crop[iy,ix]):
-					logger.warn("Generated source position (%s,%s) on zero or nan pixel (data=%s) in image crop centered on (%s,%s), skip generation..." % (x0_source,y0_source,data_crop[iy,ix],x0,y0))
+					logger.warn("Generated source position (%s,%s) on zero or nan pixel (data=%s), skip generation..." % (x0_source,y0_source,data_crop[iy,ix]))
 					continue
 				
 
