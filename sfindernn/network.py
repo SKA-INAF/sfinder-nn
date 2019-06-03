@@ -88,6 +88,8 @@ class NNTrainer(object):
 		self.outputs_labels_test= None
 
 		# - Neural net architecture & train
+		self.learn_labels= True
+		self.learn_pars= True
 		self.model= None
 		self.fitsout= None
 		self.optimizer= 'rmsprop'
@@ -138,6 +140,14 @@ class NNTrainer(object):
 	def set_learning_rate(self,lr):
 		""" Set learning rate """
 		self.learning_rate= lr
+
+	def enable_labels_learning(self,choice):
+		""" Turn on/off learning of labels during training """
+		self.learn_labels= choice
+
+	def enable_pars_learning(self,choice):
+		""" Turn on/off learning of pars during training """
+		self.learn_pars= choice
 
 	def enable_train_data_flip(self,choice):
 		""" Turn on/off flipping of train data during training """
@@ -222,23 +232,30 @@ class NNTrainer(object):
 	def __mse_metric(self,y_true,y_pred):
 		""" Define MSE metric"""
 		
-		# - Extract tensors relative to pars
-		y_true_type= y_true[:,:self.nobjects]
-		y_pred_type= y_pred[:,:self.nobjects]
-		
-		# - Extract tensors relative to parameters
-		y_true_pars= y_true[:,self.nobjects:]
-		y_pred_pars= y_pred[:,self.nobjects:]
+		mse= 0
 
-		# - Replicate true labels to have a tensor of size (N,nobjects*npars)
-		#   This is multiplied by pars so that objects with label=0 are not entering in pars MSE computation (they sum zero)
-		w= K.repeat_elements(y_true_type,self.npars,axis=1)
+		if self.learn_labels:
+
+			# - Extract tensors relative to pars
+			y_true_type= y_true[:,:self.nobjects]
+			y_pred_type= y_pred[:,:self.nobjects]
 		
-		# - Count number of objects
-		N= tf.count_nonzero(y_true_type,dtype=tf.dtypes.float32)
+			# - Extract tensors relative to parameters
+			y_true_pars= y_true[:,self.nobjects:]
+			y_pred_pars= y_pred[:,self.nobjects:]
+
+			# - Replicate true labels to have a tensor of size (N,nobjects*npars)
+			#   This is multiplied by pars so that objects with label=0 are not entering in pars MSE computation (they sum zero)
+			w= K.repeat_elements(y_true_type,self.npars,axis=1)
 		
-		# - Compute MSE for pars relative to target objects (not background)
-		mse= K.sum(K.square( w*(y_pred_pars - y_true_pars) ), axis=-1)/N
+			# - Count number of objects
+			N= tf.count_nonzero(y_true_type,dtype=tf.dtypes.float32)
+		
+			# - Compute MSE for pars relative to target objects (not background)
+			mse= K.sum(K.square( w*(y_pred_pars - y_true_pars) ), axis=-1)/N
+
+		else:
+			mse= K.mean(K.square(y_pred - y_true), axis=-1)
 		
 		return mse
 
@@ -246,13 +263,19 @@ class NNTrainer(object):
 	def __classification_metric(self,y_true,y_pred):
 		""" Define classification metric"""
 		
-		# - Extract tensors relative to pars
-		y_true_type= y_true[:,:self.nobjects]
-		y_pred_type= y_pred[:,:self.nobjects]
-		
-		# - Compute binary crossentropy for labels
-		binaryCE = keras.metrics.binary_crossentropy(y_true_type,y_pred_type)
+		binaryCE= 0
 
+		if self.learn_pars:
+			# - Extract tensors relative to pars
+			y_true_type= y_true[:,:self.nobjects]
+			y_pred_type= y_pred[:,:self.nobjects]
+		
+			# - Compute binary crossentropy for labels
+			binaryCE = keras.metrics.binary_crossentropy(y_true_type,y_pred_type)
+			
+		else:
+			binaryCE = keras.metrics.binary_crossentropy(y_true,y_pred)
+			
 		return binaryCE
 
 	#####################################
@@ -261,45 +284,43 @@ class NNTrainer(object):
 	def __tot_loss(self,y_true,y_pred):
 		""" Definition of NN total loss """
 		
-		# - Extract tensors relative to pars
-		y_true_type= y_true[:,:self.nobjects]
-		y_pred_type= y_pred[:,:self.nobjects]
-		
-		# - Extract tensors relative to parameters
-		y_true_pars= y_true[:,self.nobjects:]
-		y_pred_pars= y_pred[:,self.nobjects:]
-		
-		# - Replicate true labels to have a tensor of size (N,nobjects*npars)
-		#   This is multiplied by pars so that objects with label=0 are not entering in pars MSE computation (they sum zero)
-		w= K.repeat_elements(y_true_type,self.npars,axis=1)
-		
-		# - Count number of objects
-		N= tf.count_nonzero(y_true_type,dtype=tf.dtypes.float32)
-		
-		# - Compute MSE for pars relative to target objects (not background)
-		mse= K.sum(K.square( w*(y_pred_pars - y_true_pars) ), axis=-1)/N
-		
-		# - Compute binary crossentropy for labels
-		binaryCE = keras.metrics.binary_crossentropy(y_true_type,y_pred_type)
+		tot= 0
 
-		# - Compute total loss as weighted sum of MSE + binaryCE		
-		tot= self.pars_loss_weight*mse + self.labels_loss_weight*binaryCE
-		#tot= mse
-
-		#tf.Print(input_=mse, data=[mse], message='mse= ')
-		#tf.Print(input_=binaryCE, data=[binaryCE], message='binaryCE= ')
-		#tf.print('mse= ',mse,output_stream=sys.stdout)
-		#tf.print('binaryCE= ',binaryCE,output_stream=sys.stdout)
+		if self.learn_labels:
+			
+			if self.learn_pars:
+				# - Extract tensors relative to pars
+				y_true_type= y_true[:,:self.nobjects]
+				y_pred_type= y_pred[:,:self.nobjects]
 		
-		#input1 = K.constant(mse)
-		#input2 = K.constant(binaryCE)
-		#node = tf.add(input1, input2)
-		#K.print_tensor(node)
-		
-		#sess = tf.InteractiveSession()
-		#print("mse/binaryCE= ", node.eval())
-		#sess.close()
+				# - Compute binary crossentropy for labels
+				binaryCE = keras.metrics.binary_crossentropy(y_true_type,y_pred_type)
 
+				# - Extract tensors relative to parameters
+				y_true_pars= y_true[:,self.nobjects:]
+				y_pred_pars= y_pred[:,self.nobjects:]
+		
+				# - Replicate true labels to have a tensor of size (N,nobjects*npars)
+				#   This is multiplied by pars so that objects with label=0 are not entering in pars MSE computation (they sum zero)
+				w= K.repeat_elements(y_true_type,self.npars,axis=1)
+		
+				# - Count number of objects
+				N= tf.count_nonzero(y_true_type,dtype=tf.dtypes.float32)
+		
+				# - Compute MSE for pars relative to target objects (not background)
+				mse= K.sum(K.square( w*(y_pred_pars - y_true_pars) ), axis=-1)/N
+		
+				# - Compute total loss as weighted sum of MSE + binaryCE		
+				tot= self.pars_loss_weight*mse + self.labels_loss_weight*binaryCE
+
+			else:
+				binaryCE = keras.metrics.binary_crossentropy(y_true,y_pred)
+				tot= binaryCE
+
+		else:
+			mse= K.mean(K.square(y_pred - y_true), axis=-1)
+			tot= mse
+		
 		return tot
 
 
@@ -390,12 +411,21 @@ class NNTrainer(object):
 		pars_prediction = layers.Dense(self.nobjects*self.npars, activation='linear', name='pars')(x)
 
 		# - Concatenate output layers
-		nn_prediction= layers.concatenate([type_prediction,pars_prediction],name='nnout')
+		if self.learn_labels:
+			if self.learn_pars:
+				nn_prediction= layers.concatenate([type_prediction,pars_prediction],name='nnout')
+			else:
+				nn_prediction= layers.Dense(self.nobjects, activation='sigmoid', name='nnout')(x) 
+		else:
+			if self.learn_pars:
+				nn_prediction= layers.Dense(self.nobjects*self.npars, activation='linear', name='nnout')(x)
+			else:
+				logger.error("You need to select learning of at least one between pars or labels!")
+				return -1
 
 		# - Create NN model
 		self.model = Model(
 				inputs=inputs,
-				#outputs=[type_prediction, pars_prediction],
 				outputs=nn_prediction,
 				name="SourceNet"
 		)
@@ -404,7 +434,7 @@ class NNTrainer(object):
 		self.model.summary()
 
 		#- Set optimizer & loss function per each output
-		print("INFO: Compiling network ...")
+		logger.info("Compiling network ...")
 		if self.optimizer=='rmsprop':
 			opt= optimizers.RMSprop(lr=self.learning_rate)
 		elif self.optimizer=='sgd':
@@ -417,18 +447,28 @@ class NNTrainer(object):
 		
 		#opt= Adam(lr=INIT_LR, decay=INIT_LR / nepochs)
 	
-		losses = {
-			"type": "binary_crossentropy",
-			"pars": "mse"
-		}
-		lossWeights = {
-			"type": self.labels_loss_weight,
-			"pars": self.pars_loss_weight
-		}
-
+		#losses = {
+		#	"type": "binary_crossentropy",
+		#	"pars": "mse"
+		#}
+		#lossWeights = {
+		#	"type": self.labels_loss_weight,
+		#	"pars": self.pars_loss_weight
+		#}
 		#self.model.compile(optimizer=opt,loss=losses, loss_weights=lossWeights, metrics=['accuracy'])
-		self.model.compile(optimizer=opt,loss=self.__tot_loss, metrics=['accuracy',self.__classification_metric,self.__mse_metric])
 		
+		if self.learn_labels:
+			if self.learn_pars:
+				self.model.compile(optimizer=opt,loss=self.__tot_loss, metrics=['accuracy',self.__classification_metric,self.__mse_metric])
+			else:
+				self.model.compile(optimizer=opt,loss=self.__tot_loss, metrics=['accuracy',self.__classification_metric])
+		else:
+			if self.learn_pars:
+				self.model.compile(optimizer=opt,loss=self.__tot_loss, metrics=['accuracy',self.__mse_metric])
+			else:
+				logger.error("You need to select learning of at least one between pars or labels!")
+				return -1
+
 		return 0
 	
 	###########################
@@ -438,7 +478,6 @@ class NNTrainer(object):
 		""" Flip train data during training """
 		
 		# - Get NN prediction to train data
-		#(outputs_labels_pred, outputs_pred)= self.model.predict(self.inputs_train)
 		nnout_pred= self.model.predict(self.inputs_train)
 		outputs_labels_pred= nnout_pred[:,:self.nobjects]
 		outputs_pred= nnout_pred[:,self.nobjects:]
@@ -557,28 +596,62 @@ class NNTrainer(object):
 		for epoch in range(self.nepochs):
 		
 			# - Train for 1 epoch
-			self.fitout= self.model.fit(
-				x=self.inputs_train, 
-				#y={"type": self.outputs_labels_train,"pars": self.outputs_train},
-				y={"nnout": np.concatenate((self.outputs_labels_train,self.outputs_train),axis=1) },
-				#validation_data=(self.inputs_test,{"type": self.outputs_labels_test,"pars": self.outputs_test}),
-				validation_data=(self.inputs_test,{"nnout": np.concatenate((self.outputs_labels_test,self.outputs_test),axis=1) }),
-				#batch_size=64
-				epochs=1,
-				verbose=1
-			)
+			type_loss_train= 0
+			type_loss_test= 0
+			pars_loss_train= 0
+			pars_loss_test= 0
+
+			if self.learn_labels:
+				if self.learn_pars:
+
+					self.fitout= self.model.fit(
+						x=self.inputs_train, 
+						y={"nnout": np.concatenate((self.outputs_labels_train,self.outputs_train),axis=1) },
+						validation_data=(self.inputs_test,{"nnout": np.concatenate((self.outputs_labels_test,self.outputs_test),axis=1) }),
+						epochs=1,
+						verbose=1
+					)
+					type_loss_train= self.fitout.history['__classification_metric'][0]
+					type_loss_test= self.fitout.history['val___classification_metric'][0]
+					pars_loss_train= self.fitout.history['__mse_metric'][0]					
+					pars_loss_test= self.fitout.history['val___mse_metric'][0]
+					
+				else:
+					self.fitout= self.model.fit(
+						x=self.inputs_train, 
+						y={"nnout": self.outputs_labels_train },
+						validation_data=(self.inputs_test,{"nnout": self.outputs_labels_test}),
+						epochs=1,
+						verbose=1
+					)
+					type_loss_train= self.fitout.history['__classification_metric'][0]
+					type_loss_test= self.fitout.history['val___classification_metric'][0]
+					
+			else:
+				if self.learn_pars:
+
+					self.fitout= self.model.fit(
+						x=self.inputs_train, 
+						y={"nnout": self.outputs_train},
+						validation_data=(self.inputs_test,{"nnout": self.outputs_test}),
+						epochs=1,
+						verbose=1
+					)
+					pars_loss_train= self.fitout.history['__mse_metric'][0]
+					pars_loss_test= self.fitout.history['val___mse_metric'][0]
+			
+				else:
+					logger.error("You need to select learning of at least one between pars or labels!")
+					return -1
 
 			# - Save epoch loss
 			#print (self.fitout.history)
 			
-			loss_train= self.fitout.history['loss'][0]
-			type_loss_train= self.fitout.history['__classification_metric'][0]
-			pars_loss_train= self.fitout.history['__mse_metric'][0]
-			loss_test= self.fitout.history['val_loss'][0]
-			type_loss_test= self.fitout.history['val___classification_metric'][0]
-			pars_loss_test= self.fitout.history['val___mse_metric'][0]
 			accuracy_train= self.fitout.history['acc'][0]
 			accuracy_test= self.fitout.history['val_acc'][0]
+			loss_train= self.fitout.history['loss'][0]
+			loss_test= self.fitout.history['val_loss'][0]
+			
 			if epoch>=1:
 				deltaLoss_train= (loss_train/self.train_loss_vs_epoch[0,epoch-1]-1)*100.
 				deltaLoss_test= (loss_test/self.test_loss_vs_epoch[0,epoch-1]-1)*100.
@@ -598,12 +671,12 @@ class NNTrainer(object):
 			
 
 			# - Flip train data
-			if self.flip_train_data and self.nobjects>1:
+			if self.flip_train_data and self.nobjects>1 and self.learn_labels and self.learn_pars:
 				logger.info("Flipping train data at epoch %d ..." % epoch)
 				self.__do_train_data_flip()	
 
 			# - Get predictions for test sample and flip according to smallest MSE match
-			if self.flip_test_data and self.nobjects>1:
+			if self.flip_test_data and self.nobjects>1 and self.learn_labels and self.learn_pars:
 				logger.info("Flipping test data at epoch %d ..." % epoch)
 				self.__do_train_data_flip()
 
@@ -659,25 +732,10 @@ class NNTrainer(object):
 		#================================
 		#==   EVALUATE NN ON TRAIN DATA
 		#================================
+		# - Computing true & false detections		
 		logger.info("Computing NN performance metrics on train data ...")
-		#(predictions_labels_train, predictions_train)= self.model.predict(self.inputs_train)
-		nnout_train= self.model.predict(self.inputs_train)
-		predictions_labels_train= nnout_train[:,:self.nobjects]
-		predictions_train= nnout_train[:,self.nobjects:]
+		model_predictions= self.model.predict(self.inputs_train)
 
-		for i in range(predictions_labels_train.shape[0]):
-			target= ','.join(map(str, self.outputs_labels_train[i,:]))	
-			pred= ','.join(map(str, predictions_labels_train[i,:]))
-			logger.debug("Train labels entry no. %d: target=[%s], pred=[%s]" % (i+1,target,pred) )
-
-		for i in range(predictions_train.shape[0]):
-			target= ','.join(map(str, self.outputs_train[i,:]))
-			pred= ','.join(map(str, predictions_train[i,:]))
-			logger.debug("Train spars entry no. %d: target=[%s], pred=[%s]" % (i+1,target,pred) )
-
-
-		# - Computing true & false detections
-		nsamples_train= self.outputs_labels_train.shape[0]
 		detThr= 0.5
 		nobjs_tot= 0
 		nobjs_true= 0
@@ -689,88 +747,276 @@ class NNTrainer(object):
 		ypull_list= []
 		spull_list= []
 		nnout_train= []
-	
-		for i in range(nsamples_train):
-			target= self.outputs_labels_train[i,:]
-			pred= predictions_labels_train[i,:]	
-			target_pars= self.outputs_train[i,:]
-			pred_pars= predictions_train[i,:]
 
-			true_obj_indexes= np.argwhere(target==1).flatten()
-			rec_obj_indexes= np.argwhere(pred>detThr).flatten()
-			n= len(true_obj_indexes)
-			nrec= len(rec_obj_indexes)
-			ntrue= 0
-			nrec_true= 0
-			nrec_false= 0
+		if self.learn_labels:
+			predictions_labels_train= model_predictions[:,:self.nobjects]
+			nsamples_train= self.outputs_labels_train.shape[0]
+					
+			if self.learn_pars:
+				predictions_train= model_predictions[:,self.nobjects:]
 
-			
-			for index in range(self.nobjects):
-				obj_data= []
-				obj_data.append(target[index])
-				obj_data.append(pred[index])
-				for k in range(self.npars):
-					obj_data.append(target_pars[k+index*self.npars])
-					obj_data.append(pred_pars[k+index*self.npars])
+				for i in range(nsamples_train):
+					target= self.outputs_labels_train[i,:]
+					pred= predictions_labels_train[i,:]	
+					target_pars= self.outputs_train[i,:]
+					pred_pars= predictions_train[i,:]
+
+
+					true_obj_indexes= np.argwhere(target==1).flatten()
+					rec_obj_indexes= np.argwhere(pred>detThr).flatten()
+					n= len(true_obj_indexes)
+					nrec= len(rec_obj_indexes)
+					ntrue= 0
+					nrec_true= 0
+					nrec_false= 0
+
+					for index in range(self.nobjects):
+						obj_data= []
+						obj_data.append(target[index])
+						obj_data.append(pred[index])
+						for k in range(self.npars):
+							obj_data.append(target_pars[k+index*self.npars])
+							obj_data.append(pred_pars[k+index*self.npars])
 				
-				nnout_train.append(obj_data)
+						nnout_train.append(obj_data)
+
+					for index in true_obj_indexes:
+						x0_true= target_pars[0 + index*self.npars]
+						y0_true= target_pars[1 + index*self.npars]
+						S_true= 1
+						if (2 + index*self.npars) < target_pars.size:
+							S_true= target_pars[2 + index*self.npars]
+
+						if pred[index]>detThr:
+							ntrue+= 1
+							x0_rec= pred_pars[0 + index*self.npars]
+							y0_rec= pred_pars[1 + index*self.npars]
+							S_rec= 1
+							if (2 + index*self.npars)<pred_pars.size:
+								S_rec= pred_pars[2 + index*self.npars]
+
+							s_list.append(np.log10(S_true))
+							spull_list.append(S_rec/S_true-1)
+							xpull_list.append(x0_rec-x0_true)
+							ypull_list.append(y0_rec-y0_true)
+
+					for index in rec_obj_indexes:
+						if target[index]==1:
+							nrec_true+= 1
+						else:
+							nrec_false+= 1
+	
+					nobjs_tot+= n
+					nobjs_rec+= nrec
+					nobjs_true+= ntrue
+					nobjs_rec_true+= nrec_true 
+					nobjs_rec_false+= nrec_false
+
+				completeness_train= 0
+				reliability_train= 0
+				if nobjs_tot>0:	
+					completeness_train= float(nobjs_true)/float(nobjs_tot)
+				if nobjs_rec>0:
+					reliability_train= float(nobjs_rec_true)/float(nobjs_rec)
+
+				logger.info("NN Train Results: Completeness(det/tot=%d/%d)=%s, Reliability(true/rec=%d/%d)=%s" % (nobjs_true,nobjs_tot,str(completeness_train),nobjs_rec_true,nobjs_rec,str(reliability_train)))
+
+			else:	
+
+				for i in range(nsamples_train):
+					target= self.outputs_labels_train[i,:]
+					pred= predictions_labels_train[i,:]	
+					
+					true_obj_indexes= np.argwhere(target==1).flatten()
+					rec_obj_indexes= np.argwhere(pred>detThr).flatten()
+					n= len(true_obj_indexes)
+					nrec= len(rec_obj_indexes)
+					ntrue= 0
+					nrec_true= 0
+					nrec_false= 0
+
+					for index in range(self.nobjects):
+						obj_data= []
+						obj_data.append(target[index])
+						obj_data.append(pred[index])
 			
+						nnout_train.append(obj_data)
+				
+					for index in true_obj_indexes:	
+						if pred[index]>detThr:
+							ntrue+= 1
+							
+					for index in rec_obj_indexes:
+						if target[index]==1:
+							nrec_true+= 1
+						else:
+							nrec_false+= 1
 	
-			for index in true_obj_indexes:
-				x0_true= target_pars[0 + index*self.npars]
-				y0_true= target_pars[1 + index*self.npars]
-				S_true= 1
-				if (2 + index*self.npars) < target_pars.size:
-					S_true= target_pars[2 + index*self.npars]
+					nobjs_tot+= n
+					nobjs_rec+= nrec
+					nobjs_true+= ntrue
+					nobjs_rec_true+= nrec_true 
+					nobjs_rec_false+= nrec_false
 
-				if pred[index]>detThr:
-					ntrue+= 1
-					x0_rec= pred_pars[0 + index*self.npars]
-					y0_rec= pred_pars[1 + index*self.npars]
-					S_rec= 1
-					if (2 + index*self.npars)<pred_pars.size:
-						S_rec= pred_pars[2 + index*self.npars]
+				completeness_train= 0
+				reliability_train= 0
+				if nobjs_tot>0:	
+					completeness_train= float(nobjs_true)/float(nobjs_tot)
+				if nobjs_rec>0:
+					reliability_train= float(nobjs_rec_true)/float(nobjs_rec)
 
-					s_list.append(np.log10(S_true))
-					spull_list.append(S_rec/S_true-1)
-					xpull_list.append(x0_rec-x0_true)
-					ypull_list.append(y0_rec-y0_true)
+				logger.info("NN Train Results: Completeness(det/tot=%d/%d)=%s, Reliability(true/rec=%d/%d)=%s" % (nobjs_true,nobjs_tot,str(completeness_train),nobjs_rec_true,nobjs_rec,str(reliability_train)))
 
-			for index in rec_obj_indexes:
-				if target[index]==1:
-					nrec_true+= 1
-				else:
-					nrec_false+= 1
-	
-			nobjs_tot+= n
-			nobjs_rec+= nrec
-			nobjs_true+= ntrue
-			nobjs_rec_true+= nrec_true 
-			nobjs_rec_false+= nrec_false
+		else:
 
-		completeness_train= 0
-		reliability_train= 0
-		if nobjs_tot>0:	
-			completeness_train= float(nobjs_true)/float(nobjs_tot)
-		if nobjs_rec>0:
-			reliability_train= float(nobjs_rec_true)/float(nobjs_rec)
+			if self.learn_pars:
 
-		logger.info("NN Train Results: Completeness(det/tot=%d/%d)=%s, Reliability(true/rec=%d/%d)=%s" % (nobjs_true,nobjs_tot,str(completeness_train),nobjs_rec_true,nobjs_rec,str(reliability_train)))
+				nsamples_train= self.outputs_train.shape[0]
+				predictions_train= model_predictions
 
+				for i in range(nsamples_train):
+					target_pars= self.outputs_train[i,:]
+					pred_pars= predictions_train[i,:]
+
+					for index in range(self.nobjects):
+						x0_true= target_pars[0 + index*self.npars]
+						y0_true= target_pars[1 + index*self.npars]
+						S_true= 1
+						if (2 + index*self.npars) < target_pars.size:
+							S_true= target_pars[2 + index*self.npars]
+
+						x0_rec= pred_pars[0 + index*self.npars]
+						y0_rec= pred_pars[1 + index*self.npars]
+						S_rec= 1
+						if (2 + index*self.npars)<pred_pars.size:
+							S_rec= pred_pars[2 + index*self.npars]
+
+						s_list.append(np.log10(S_true))
+						spull_list.append(S_rec/S_true-1)
+						xpull_list.append(x0_rec-x0_true)
+						ypull_list.append(y0_rec-y0_true)
+
+						obj_data= []
+						for k in range(self.npars):
+							obj_data.append(target_pars[k+index*self.npars])
+							obj_data.append(pred_pars[k+index*self.npars])
+				
+						nnout_train.append(obj_data)
+
+			else:
+				logger.error("You need to select learning of at least one between pars or labels!")
+				return -1
+					
 		# - Write ascii file with results
 		logger.info("Writing ascii file with NN performances on train data ...")
 		Utils.write_ascii(np.array(nnout_train),self.outfile_nnout_train,'# target label - predicted label - target pars - predicted pars')	
+
+
+
+		#predictions_labels_train= nnout_train[:,:self.nobjects]
+		#predictions_train= nnout_train[:,self.nobjects:]
+
+		#for i in range(predictions_labels_train.shape[0]):
+		#	target= ','.join(map(str, self.outputs_labels_train[i,:]))	
+		#	pred= ','.join(map(str, predictions_labels_train[i,:]))
+		#	logger.debug("Train labels entry no. %d: target=[%s], pred=[%s]" % (i+1,target,pred) )
+
+		#for i in range(predictions_train.shape[0]):
+		#	target= ','.join(map(str, self.outputs_train[i,:]))
+		#	pred= ','.join(map(str, predictions_train[i,:]))
+		#	logger.debug("Train spars entry no. %d: target=[%s], pred=[%s]" % (i+1,target,pred) )
+
+
+		# - Computing true & false detections
+		#nsamples_train= self.outputs_labels_train.shape[0]
+		#detThr= 0.5
+		#nobjs_tot= 0
+		#nobjs_true= 0
+		#nobjs_rec= 0
+		#nobjs_rec_true= 0
+		#nobjs_rec_false= 0
+		#s_list= []
+		#xpull_list= []
+		#ypull_list= []
+		#spull_list= []
+		#nnout_train= []
+	
+		#for i in range(nsamples_train):
+		#	target= self.outputs_labels_train[i,:]
+		#	pred= predictions_labels_train[i,:]	
+		#	target_pars= self.outputs_train[i,:]
+		#	pred_pars= predictions_train[i,:]
+
+		#	true_obj_indexes= np.argwhere(target==1).flatten()
+		#	rec_obj_indexes= np.argwhere(pred>detThr).flatten()
+		#	n= len(true_obj_indexes)
+		#	nrec= len(rec_obj_indexes)
+		#	ntrue= 0
+		#	nrec_true= 0
+		#	nrec_false= 0
+
+		#	for index in range(self.nobjects):
+		#		obj_data= []
+		#		obj_data.append(target[index])
+		#		obj_data.append(pred[index])
+		#		for k in range(self.npars):
+		#			obj_data.append(target_pars[k+index*self.npars])
+		#			obj_data.append(pred_pars[k+index*self.npars])
+		#		
+		#		nnout_train.append(obj_data)
+			
+		#	for index in true_obj_indexes:
+		#		x0_true= target_pars[0 + index*self.npars]
+		#		y0_true= target_pars[1 + index*self.npars]
+		#		S_true= 1
+		#		if (2 + index*self.npars) < target_pars.size:
+		#			S_true= target_pars[2 + index*self.npars]
+#
+		#		if pred[index]>detThr:
+		#			ntrue+= 1
+		#			x0_rec= pred_pars[0 + index*self.npars]
+		#			y0_rec= pred_pars[1 + index*self.npars]
+		#			S_rec= 1
+		#			if (2 + index*self.npars)<pred_pars.size:
+		#				S_rec= pred_pars[2 + index*self.npars]
+
+		#			s_list.append(np.log10(S_true))
+		#			spull_list.append(S_rec/S_true-1)
+		#			xpull_list.append(x0_rec-x0_true)
+		#			ypull_list.append(y0_rec-y0_true)
+
+		#	for index in rec_obj_indexes:
+		#		if target[index]==1:
+		#			nrec_true+= 1
+		#		else:
+		#			nrec_false+= 1
+	
+		#	nobjs_tot+= n
+		#	nobjs_rec+= nrec
+		#	nobjs_true+= ntrue
+		#	nobjs_rec_true+= nrec_true 
+		#	nobjs_rec_false+= nrec_false
+
+		#completeness_train= 0
+		#reliability_train= 0
+		#if nobjs_tot>0:	
+		#	completeness_train= float(nobjs_true)/float(nobjs_tot)
+		#if nobjs_rec>0:
+		#	reliability_train= float(nobjs_rec_true)/float(nobjs_rec)
+
+		#logger.info("NN Train Results: Completeness(det/tot=%d/%d)=%s, Reliability(true/rec=%d/%d)=%s" % (nobjs_true,nobjs_tot,str(completeness_train),nobjs_rec_true,nobjs_rec,str(reliability_train)))
+
+		# - Write ascii file with results
+		#logger.info("Writing ascii file with NN performances on train data ...")
+		#Utils.write_ascii(np.array(nnout_train),self.outfile_nnout_train,'# target label - predicted label - target pars - predicted pars')	
 
 		#================================
 		#==   EVALUATE NN ON TEST DATA
 		#================================
 		logger.info("Computing NN performance metrics on test data ...")
-		#(predictions_labels_test, predictions_test)= self.model.predict(self.inputs_test)
-		nnout_test= self.model.predict(self.inputs_test)
-		predictions_labels_test= nnout_test[:,:self.nobjects]
-		predictions_test= nnout_test[:,self.nobjects:]
+		model_predictions= self.model.predict(self.inputs_test)
 
-		nsamples_test= self.outputs_labels_test.shape[0]
+
 		detThr= 0.5
 		nobjs_tot= 0
 		nobjs_true= 0
@@ -783,86 +1029,264 @@ class NNTrainer(object):
 		spull_list_test= []
 		nnout_test= []
 
-		for i in range(nsamples_test):
-			target= self.outputs_labels_test[i,:]
-			pred= predictions_labels_test[i,:]	
-			target_pars= self.outputs_test[i,:]
-			pred_pars= predictions_test[i,:]
+		if self.learn_labels:
 
-			true_obj_indexes= np.argwhere(target==1).flatten()
-			rec_obj_indexes= np.argwhere(pred>detThr).flatten()
-			n= len(true_obj_indexes)
-			nrec= len(rec_obj_indexes)
-			ntrue= 0
-			nrec_true= 0
-			nrec_false= 0
+			predictions_labels_test= model_predictions[:,:self.nobjects]
+			nsamples_test= self.outputs_labels_test.shape[0]
 		
-			for index in range(self.nobjects):
-				obj_data= []
-				obj_data.append(target[index])
-				obj_data.append(pred[index])
-				for k in range(self.npars):
-					obj_data.append(target_pars[k+index*self.npars])
-					obj_data.append(pred_pars[k+index*self.npars])
+			if self.learn_pars:
+				predictions_test= model_predictions[:,self.nobjects:]
+
+				for i in range(nsamples_test):
+					target= self.outputs_labels_test[i,:]
+					pred= predictions_labels_test[i,:]	
+					target_pars= self.outputs_test[i,:]
+					pred_pars= predictions_test[i,:]
+
+					true_obj_indexes= np.argwhere(target==1).flatten()
+					rec_obj_indexes= np.argwhere(pred>detThr).flatten()
+					n= len(true_obj_indexes)
+					nrec= len(rec_obj_indexes)
+					ntrue= 0
+					nrec_true= 0
+					nrec_false= 0
+		
+					for index in range(self.nobjects):
+						obj_data= []
+						obj_data.append(target[index])
+						obj_data.append(pred[index])
+						for k in range(self.npars):
+							obj_data.append(target_pars[k+index*self.npars])
+							obj_data.append(pred_pars[k+index*self.npars])
 				
-				nnout_test.append(obj_data)
+						nnout_test.append(obj_data)
 
-			for index in true_obj_indexes:
-				x0_true= target_pars[0 + index*self.npars]
-				y0_true= target_pars[1 + index*self.npars]
-				S_true= 1
-				if (2 + index*self.npars)<target_pars.size:
-					S_true= target_pars[2 + index*self.npars]
+					for index in true_obj_indexes:
+						x0_true= target_pars[0 + index*self.npars]
+						y0_true= target_pars[1 + index*self.npars]
+						S_true= 1
+						if (2 + index*self.npars)<target_pars.size:
+							S_true= target_pars[2 + index*self.npars]
 
-				if pred[index]>detThr:
-					ntrue+= 1
-					x0_rec= pred_pars[0 + index*self.npars]
-					y0_rec= pred_pars[1 + index*self.npars]
-					S_rec= 1
-					if (2 + index*self.npars)<pred_pars.size:			
-						S_rec= pred_pars[2 + index*self.npars]
+						if pred[index]>detThr:
+							ntrue+= 1
+							x0_rec= pred_pars[0 + index*self.npars]
+							y0_rec= pred_pars[1 + index*self.npars]
+							S_rec= 1
+							if (2 + index*self.npars)<pred_pars.size:			
+								S_rec= pred_pars[2 + index*self.npars]
 
-					s_list_test.append(np.log10(S_true))
-					spull_list_test.append(S_rec/S_true-1)
-					xpull_list_test.append(x0_rec-x0_true)
-					ypull_list_test.append(y0_rec-y0_true)
+							s_list_test.append(np.log10(S_true))
+							spull_list_test.append(S_rec/S_true-1)
+							xpull_list_test.append(x0_rec-x0_true)
+							ypull_list_test.append(y0_rec-y0_true)
 
-			for index in rec_obj_indexes:
-				if target[index]==1:
-					nrec_true+= 1
-				else:
-					nrec_false+= 1
+					for index in rec_obj_indexes:
+						if target[index]==1:
+							nrec_true+= 1
+						else:
+							nrec_false+= 1
 
-			nobjs_tot+= n
-			nobjs_rec+= nrec
-			nobjs_true+= ntrue
-			nobjs_rec_true+= nrec_true 
-			nobjs_rec_false+= nrec_false
+					nobjs_tot+= n
+					nobjs_rec+= nrec
+					nobjs_true+= ntrue
+					nobjs_rec_true+= nrec_true 
+					nobjs_rec_false+= nrec_false
 
-		#logger.info("NN Test Results: nobjs_true=%d, nobjs_tot=%d, nobjs_rec_true=%d, nobjs_rec=%d" % (nobjs_true,nobjs_tot,nobjs_rec_true,nobjs_rec))
+				completeness_test= 0
+				reliability_test= 0
+				if nobjs_tot>0:
+					completeness_test= float(nobjs_true)/float(nobjs_tot)
+				if nobjs_rec>0:
+					reliability_test= float(nobjs_rec_true)/float(nobjs_rec)
 
-		completeness_test= 0
-		reliability_test= 0
-		if nobjs_tot>0:
-			completeness_test= float(nobjs_true)/float(nobjs_tot)
-		if nobjs_rec>0:
-			reliability_test= float(nobjs_rec_true)/float(nobjs_rec)
+				logger.info("NN Test Results: Completeness(det/tot=%d/%d)=%s, Reliability(true/rec=%d/%d)=%s" % (nobjs_true,nobjs_tot,str(completeness_test),nobjs_rec_true,nobjs_rec,str(reliability_test)))
 
-		logger.info("NN Test Results: Completeness(det/tot=%d/%d)=%s, Reliability(true/rec=%d/%d)=%s" % (nobjs_true,nobjs_tot,str(completeness_test),nobjs_rec_true,nobjs_rec,str(reliability_test)))
+			else:
 
-		#for i in range(predictions_labels_test.shape[0]):
-		#	target= ','.join(map(str, self.outputs_labels_test[i,:]))
-		#	pred= ','.join(map(str, predictions_labels_test[i,:]))
-		#	print("INFO: Test labels entry no. %d: target=[%s], pred=[%s]" % (i+1,target,pred) )
+				for i in range(nsamples_test):
+					target= self.outputs_labels_test[i,:]
+					pred= predictions_labels_test[i,:]	
+					
+					true_obj_indexes= np.argwhere(target==1).flatten()
+					rec_obj_indexes= np.argwhere(pred>detThr).flatten()
+					n= len(true_obj_indexes)
+					nrec= len(rec_obj_indexes)
+					ntrue= 0
+					nrec_true= 0
+					nrec_false= 0
+		
+					for index in range(self.nobjects):
+						obj_data= []
+						obj_data.append(target[index])
+						obj_data.append(pred[index])
+						
+						nnout_test.append(obj_data)
 
-		#for i in range(predictions_test.shape[0]):
-		#	target= ','.join(map(str, self.outputs_test[i,:]))
-		#	pred= ','.join(map(str, predictions_test[i,:]))
-		#	print("INFO: Test spars entry no. %d: target=[%s], pred=[%s]" % (i+1,target,pred) )
+					for index in true_obj_indexes:
+						if pred[index]>detThr:
+							ntrue+= 1
+							
+					for index in rec_obj_indexes:
+						if target[index]==1:
+							nrec_true+= 1
+						else:
+							nrec_false+= 1
+
+					nobjs_tot+= n
+					nobjs_rec+= nrec
+					nobjs_true+= ntrue
+					nobjs_rec_true+= nrec_true 
+					nobjs_rec_false+= nrec_false
+
+				completeness_test= 0
+				reliability_test= 0
+				if nobjs_tot>0:
+					completeness_test= float(nobjs_true)/float(nobjs_tot)
+				if nobjs_rec>0:
+					reliability_test= float(nobjs_rec_true)/float(nobjs_rec)
+
+				logger.info("NN Test Results: Completeness(det/tot=%d/%d)=%s, Reliability(true/rec=%d/%d)=%s" % (nobjs_true,nobjs_tot,str(completeness_test),nobjs_rec_true,nobjs_rec,str(reliability_test)))
+
+		else:
+			if self.learn_pars:
+
+				predictions_test= model_predictions
+				nsamples_test= self.outputs_test.shape[0]
+				
+				for i in range(nsamples_test):
+					target_pars= self.outputs_test[i,:]
+					pred_pars= predictions_test[i,:]
+
+					
+					for index in range(self.nobjects):
+						x0_true= target_pars[0 + index*self.npars]
+						y0_true= target_pars[1 + index*self.npars]
+						S_true= 1
+						if (2 + index*self.npars)<target_pars.size:
+							S_true= target_pars[2 + index*self.npars]
+
+						x0_rec= pred_pars[0 + index*self.npars]
+						y0_rec= pred_pars[1 + index*self.npars]
+						S_rec= 1
+						if (2 + index*self.npars)<pred_pars.size:			
+							S_rec= pred_pars[2 + index*self.npars]
+
+						s_list_test.append(np.log10(S_true))
+						spull_list_test.append(S_rec/S_true-1)
+						xpull_list_test.append(x0_rec-x0_true)
+						ypull_list_test.append(y0_rec-y0_true)
+
+						obj_data= []
+						for k in range(self.npars):
+							obj_data.append(target_pars[k+index*self.npars])
+							obj_data.append(pred_pars[k+index*self.npars])
+				
+						nnout_test.append(obj_data)
+
+			else:
+				logger.error("You need to select learning of at least one between pars or labels!")
+				return -1
+
 
 		# - Write ascii file with results
 		logger.info("Write ascii file with NN performances on test data ...")
 		Utils.write_ascii(np.array(nnout_test),self.outfile_nnout_test,'# target label - predicted label - target pars - predicted pars')	
+
+
+
+
+
+
+
+
+
+		#predictions_labels_test= nnout_test[:,:self.nobjects]
+		#predictions_test= nnout_test[:,self.nobjects:]
+
+		#nsamples_test= self.outputs_labels_test.shape[0]
+		#detThr= 0.5
+		#nobjs_tot= 0
+		#nobjs_true= 0
+		#nobjs_rec= 0
+		#nobjs_rec_true= 0
+		#nobjs_rec_false= 0
+		#s_list_test= []
+		#xpull_list_test= []
+		#ypull_list_test= []
+		#spull_list_test= []
+		#nnout_test= []
+
+		#for i in range(nsamples_test):
+		#	target= self.outputs_labels_test[i,:]
+		#	pred= predictions_labels_test[i,:]	
+		#	target_pars= self.outputs_test[i,:]
+		#	pred_pars= predictions_test[i,:]
+
+		#	true_obj_indexes= np.argwhere(target==1).flatten()
+		#	rec_obj_indexes= np.argwhere(pred>detThr).flatten()
+		#	n= len(true_obj_indexes)
+		#	nrec= len(rec_obj_indexes)
+		#	ntrue= 0
+		#	nrec_true= 0
+		#	nrec_false= 0
+		
+		#	for index in range(self.nobjects):
+		#		obj_data= []
+	 	#		obj_data.append(target[index])
+		#		obj_data.append(pred[index])
+		#		for k in range(self.npars):
+		#			obj_data.append(target_pars[k+index*self.npars])
+		#			obj_data.append(pred_pars[k+index*self.npars])
+				
+		#		nnout_test.append(obj_data)
+
+		#	for index in true_obj_indexes:
+		#		x0_true= target_pars[0 + index*self.npars]
+		#		y0_true= target_pars[1 + index*self.npars]
+		#		S_true= 1
+		#		if (2 + index*self.npars)<target_pars.size:
+		#			S_true= target_pars[2 + index*self.npars]
+
+		#		if pred[index]>detThr:
+		#			ntrue+= 1
+		#			x0_rec= pred_pars[0 + index*self.npars]
+		#			y0_rec= pred_pars[1 + index*self.npars]
+		#			S_rec= 1
+		#			if (2 + index*self.npars)<pred_pars.size:			
+		#				S_rec= pred_pars[2 + index*self.npars]
+
+		#			s_list_test.append(np.log10(S_true))
+		#			spull_list_test.append(S_rec/S_true-1)
+		#			xpull_list_test.append(x0_rec-x0_true)
+		#			ypull_list_test.append(y0_rec-y0_true)
+
+		#	for index in rec_obj_indexes:
+		#		if target[index]==1:
+		#			nrec_true+= 1
+		#		else:
+		#			nrec_false+= 1
+
+		#	nobjs_tot+= n
+		#	nobjs_rec+= nrec
+		#	nobjs_true+= ntrue
+		#	nobjs_rec_true+= nrec_true 
+		#	nobjs_rec_false+= nrec_false
+
+		#logger.info("NN Test Results: nobjs_true=%d, nobjs_tot=%d, nobjs_rec_true=%d, nobjs_rec=%d" % (nobjs_true,nobjs_tot,nobjs_rec_true,nobjs_rec))
+
+		#completeness_test= 0
+		#reliability_test= 0
+		#if nobjs_tot>0:
+		#	completeness_test= float(nobjs_true)/float(nobjs_tot)
+		#if nobjs_rec>0:
+		#	reliability_test= float(nobjs_rec_true)/float(nobjs_rec)
+
+		#logger.info("NN Test Results: Completeness(det/tot=%d/%d)=%s, Reliability(true/rec=%d/%d)=%s" % (nobjs_true,nobjs_tot,str(completeness_test),nobjs_rec_true,nobjs_rec,str(reliability_test)))
+
+		# - Write ascii file with results
+		#logger.info("Write ascii file with NN performances on test data ...")
+		#Utils.write_ascii(np.array(nnout_test),self.outfile_nnout_test,'# target label - predicted label - target pars - predicted pars')	
 
 
 		#================================
@@ -937,61 +1361,64 @@ class NNTrainer(object):
 		#==   PLOT RECO ACCURACY
 		#================================
 		# - Plot x, y position reco accuracy for detected sources
-		logger.info("Plot the source (x, y) position accuracy ...")
-		plt.style.use("ggplot")
-		(fig, ax) = plt.subplots(2, 2, figsize=(20,20))
+		if self.learn_pars:
 
-		ax[0,0].set_title("x Position Accuracy")
-		ax[0,0].set_xlabel("logS (Jy/beam)")
-		ax[0,0].set_ylabel("dx")
-		ax[0,0].scatter(np.array(s_list),np.array(xpull_list),label="TRAIN SAMPLE")
-		ax[0,0].legend()
+			logger.info("Plot the source (x, y) position accuracy ...")
+			plt.style.use("ggplot")
+			(fig, ax) = plt.subplots(2, 2, figsize=(20,20))
 
-		ax[0,1].set_title("y Position Accuracy")
-		ax[0,1].set_xlabel("logS (Jy/beam)")
-		ax[0,1].set_ylabel("dy")
-		ax[0,1].scatter(np.array(s_list),np.array(ypull_list),label="TRAIN SAMPLE")
-		ax[0,1].legend()
+			ax[0,0].set_title("x Position Accuracy")
+			ax[0,0].set_xlabel("logS (Jy/beam)")
+			ax[0,0].set_ylabel("dx")
+			ax[0,0].scatter(np.array(s_list),np.array(xpull_list),label="TRAIN SAMPLE")
+			ax[0,0].legend()
 
-		ax[1,0].set_title("x Position Accuracy")
-		ax[1,0].set_xlabel("logS (Jy/beam)")
-		ax[1,0].set_ylabel("dx")
-		ax[1,0].scatter(np.array(s_list_test),np.array(xpull_list_test),label="TEST SAMPLE")
-		ax[1,0].legend()
+			ax[0,1].set_title("y Position Accuracy")
+			ax[0,1].set_xlabel("logS (Jy/beam)")
+			ax[0,1].set_ylabel("dy")
+			ax[0,1].scatter(np.array(s_list),np.array(ypull_list),label="TRAIN SAMPLE")
+			ax[0,1].legend()
 
-		ax[1,1].set_title("y Position Accuracy")
-		ax[1,1].set_xlabel("logS (Jy/beam)")
-		ax[1,1].set_ylabel("dy")
-		ax[1,1].scatter(np.array(s_list_test),np.array(ypull_list_test),label="TEST SAMPLE")
-		ax[1,1].legend()
+			ax[1,0].set_title("x Position Accuracy")
+			ax[1,0].set_xlabel("logS (Jy/beam)")
+			ax[1,0].set_ylabel("dx")
+			ax[1,0].scatter(np.array(s_list_test),np.array(xpull_list_test),label="TEST SAMPLE")
+			ax[1,0].legend()
 
-		plt.tight_layout()
-		plt.savefig(self.outfile_posaccuracy)
-		plt.close()
+			ax[1,1].set_title("y Position Accuracy")
+			ax[1,1].set_xlabel("logS (Jy/beam)")
+			ax[1,1].set_ylabel("dy")
+			ax[1,1].scatter(np.array(s_list_test),np.array(ypull_list_test),label="TEST SAMPLE")
+			ax[1,1].legend()
+
+			plt.tight_layout()
+			plt.savefig(self.outfile_posaccuracy)
+			plt.close()
 
 		#================================
 		#==   PLOT FLUX ACCURACY
 		#================================
 		# - Plot flux reco accuracy for detected sources
-		logger.info("Plot the source flux accuracy ...")
-		plt.style.use("ggplot")
-		(fig, ax) = plt.subplots(2, 1, figsize=(20,20))
+		if self.learn_pars:
+			logger.info("Plot the source flux accuracy ...")
+			plt.style.use("ggplot")
+			(fig, ax) = plt.subplots(2, 1, figsize=(20,20))
 
-		ax[0].set_title("Flux Accuracy")
-		ax[0].set_xlabel("logS (Jy/beam)")
-		ax[0].set_ylabel("dS")
-		ax[0].scatter(np.array(s_list),np.array(spull_list),label="TRAIN SAMPLE")
-		ax[0].legend()
+			ax[0].set_title("Flux Accuracy")
+			ax[0].set_xlabel("logS (Jy/beam)")
+			ax[0].set_ylabel("dS")
+			ax[0].scatter(np.array(s_list),np.array(spull_list),label="TRAIN SAMPLE")
+			ax[0].legend()
 
-		ax[1].set_title("Flux Accuracy")
-		ax[1].set_xlabel("logS (Jy/beam)")
-		ax[1].set_ylabel("dS")
-		ax[1].scatter(np.array(s_list_test),np.array(spull_list_test),label="TEST SAMPLE")
-		ax[1].legend()
+			ax[1].set_title("Flux Accuracy")
+			ax[1].set_xlabel("logS (Jy/beam)")
+			ax[1].set_ylabel("dS")
+			ax[1].scatter(np.array(s_list_test),np.array(spull_list_test),label="TEST SAMPLE")
+			ax[1].legend()
 
-		plt.tight_layout()
-		plt.savefig(self.outfile_fluxaccuracy)
-		plt.close()
+			plt.tight_layout()
+			plt.savefig(self.outfile_fluxaccuracy)
+			plt.close()
 	
 		#===================================
 		#==   PLOT CONV LAYER ACTIVATIONS
@@ -1000,6 +1427,196 @@ class NNTrainer(object):
 		#self.__draw_conv_layer_activations(self.inputs_train)
 
 		return 0
+
+
+	#########################################
+	##     EVAL NN RESULTS ON TRAIN
+	#########################################
+	def __eval_train_results(self):
+		""" Evaluate NN results on train data """
+
+		logger.info("Computing NN performance metrics on train data ...")
+		nnout_train= self.model.predict(self.inputs_train)
+
+		detThr= 0.5
+		nobjs_tot= 0
+		nobjs_true= 0
+		nobjs_rec= 0
+		nobjs_rec_true= 0
+		nobjs_rec_false= 0
+		s_list= []
+		xpull_list= []
+		ypull_list= []
+		spull_list= []
+		nnout_train= []
+
+		# - Computing true & false detections		
+		if self.learn_labels:
+			predictions_labels_train= nnout_train[:,:self.nobjects]
+			nsamples_train= self.outputs_labels_train.shape[0]
+					
+			if self.learn_pars:
+				predictions_train= nnout_train[:,self.nobjects:]
+
+				for i in range(nsamples_train):
+					target= self.outputs_labels_train[i,:]
+					pred= predictions_labels_train[i,:]	
+					target_pars= self.outputs_train[i,:]
+					pred_pars= predictions_train[i,:]
+
+					true_obj_indexes= np.argwhere(target==1).flatten()
+					rec_obj_indexes= np.argwhere(pred>detThr).flatten()
+					n= len(true_obj_indexes)
+					nrec= len(rec_obj_indexes)
+					ntrue= 0
+					nrec_true= 0
+					nrec_false= 0
+
+					for index in range(self.nobjects):
+						obj_data= []
+						obj_data.append(target[index])
+						obj_data.append(pred[index])
+						for k in range(self.npars):
+							obj_data.append(target_pars[k+index*self.npars])
+							obj_data.append(pred_pars[k+index*self.npars])
+				
+						nnout_train.append(obj_data)
+
+					for index in true_obj_indexes:
+						x0_true= target_pars[0 + index*self.npars]
+						y0_true= target_pars[1 + index*self.npars]
+						S_true= 1
+						if (2 + index*self.npars) < target_pars.size:
+							S_true= target_pars[2 + index*self.npars]
+
+						if pred[index]>detThr:
+							ntrue+= 1
+							x0_rec= pred_pars[0 + index*self.npars]
+							y0_rec= pred_pars[1 + index*self.npars]
+							S_rec= 1
+							if (2 + index*self.npars)<pred_pars.size:
+								S_rec= pred_pars[2 + index*self.npars]
+
+							s_list.append(np.log10(S_true))
+							spull_list.append(S_rec/S_true-1)
+							xpull_list.append(x0_rec-x0_true)
+							ypull_list.append(y0_rec-y0_true)
+
+					for index in rec_obj_indexes:
+						if target[index]==1:
+							nrec_true+= 1
+						else:
+							nrec_false+= 1
+	
+					nobjs_tot+= n
+					nobjs_rec+= nrec
+					nobjs_true+= ntrue
+					nobjs_rec_true+= nrec_true 
+					nobjs_rec_false+= nrec_false
+
+				completeness_train= 0
+				reliability_train= 0
+				if nobjs_tot>0:	
+					completeness_train= float(nobjs_true)/float(nobjs_tot)
+				if nobjs_rec>0:
+					reliability_train= float(nobjs_rec_true)/float(nobjs_rec)
+
+				logger.info("NN Train Results: Completeness(det/tot=%d/%d)=%s, Reliability(true/rec=%d/%d)=%s" % (nobjs_true,nobjs_tot,str(completeness_train),nobjs_rec_true,nobjs_rec,str(reliability_train)))
+
+			else:	
+
+				for i in range(nsamples_train):
+					target= self.outputs_labels_train[i,:]
+					pred= predictions_labels_train[i,:]	
+					
+					true_obj_indexes= np.argwhere(target==1).flatten()
+					rec_obj_indexes= np.argwhere(pred>detThr).flatten()
+					n= len(true_obj_indexes)
+					nrec= len(rec_obj_indexes)
+					ntrue= 0
+					nrec_true= 0
+					nrec_false= 0
+
+					for index in range(self.nobjects):
+						obj_data= []
+						obj_data.append(target[index])
+						obj_data.append(pred[index])
+			
+						nnout_train.append(obj_data)
+				
+					for index in true_obj_indexes:	
+						if pred[index]>detThr:
+							ntrue+= 1
+							
+					for index in rec_obj_indexes:
+						if target[index]==1:
+							nrec_true+= 1
+						else:
+							nrec_false+= 1
+	
+					nobjs_tot+= n
+					nobjs_rec+= nrec
+					nobjs_true+= ntrue
+					nobjs_rec_true+= nrec_true 
+					nobjs_rec_false+= nrec_false
+
+				completeness_train= 0
+				reliability_train= 0
+				if nobjs_tot>0:	
+					completeness_train= float(nobjs_true)/float(nobjs_tot)
+				if nobjs_rec>0:
+					reliability_train= float(nobjs_rec_true)/float(nobjs_rec)
+
+				logger.info("NN Train Results: Completeness(det/tot=%d/%d)=%s, Reliability(true/rec=%d/%d)=%s" % (nobjs_true,nobjs_tot,str(completeness_train),nobjs_rec_true,nobjs_rec,str(reliability_train)))
+
+		else:
+
+			if self.learn_pars:
+
+				nsamples_train= self.outputs_train.shape[0]
+				predictions_train= nnout_train
+
+				for i in range(nsamples_train):
+					target_pars= self.outputs_train[i,:]
+					pred_pars= predictions_train[i,:]
+
+					for index in range(self.nobjects):
+						x0_true= target_pars[0 + index*self.npars]
+						y0_true= target_pars[1 + index*self.npars]
+						S_true= 1
+						if (2 + index*self.npars) < target_pars.size:
+							S_true= target_pars[2 + index*self.npars]
+
+						x0_rec= pred_pars[0 + index*self.npars]
+						y0_rec= pred_pars[1 + index*self.npars]
+						S_rec= 1
+						if (2 + index*self.npars)<pred_pars.size:
+							S_rec= pred_pars[2 + index*self.npars]
+
+						s_list.append(np.log10(S_true))
+						spull_list.append(S_rec/S_true-1)
+						xpull_list.append(x0_rec-x0_true)
+						ypull_list.append(y0_rec-y0_true)
+
+						obj_data= []
+						obj_data.append(target[index])
+						obj_data.append(pred[index])
+						for k in range(self.npars):
+							obj_data.append(target_pars[k+index*self.npars])
+							obj_data.append(pred_pars[k+index*self.npars])
+				
+						nnout_train.append(obj_data)
+
+			else:
+				logger.error("You need to select learning of at least one between pars or labels!")
+				return -1
+					
+		# - Write ascii file with results
+		logger.info("Writing ascii file with NN performances on train data ...")
+		Utils.write_ascii(np.array(nnout_train),self.outfile_nnout_train,'# target label - predicted label - target pars - predicted pars')	
+
+		return 0
+
 
 	#########################################
 	##     DRAW NN CONV LAYER ACTIVATIONS

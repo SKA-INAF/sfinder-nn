@@ -50,6 +50,9 @@ class DataProvider(object):
 		self.img_bkg_filelist= filelist_bkg
 		self.img_source_filelist= filelist_source
 		self.sourcepars_filelist= filelist_sourcepars
+		self.read_bkg= True
+		if not self.img_bkg_filelist:
+			self.read_bkg= False
 
 		# - Input data 
 		self.nx= 0
@@ -144,6 +147,11 @@ class DataProvider(object):
 	def __read_bkg_train_data(self,filelist):
 		""" Read background train data """
 		
+		# - Skip if filelist is empty or None
+		if not filelist:
+			logger.warn('Bkg filelist was not given as input.')
+			return 0
+
 		# - Init data
 		input_data= []	
 		output_size= self.nobjects*self.npars
@@ -183,13 +191,19 @@ class DataProvider(object):
 			logger.debug("Bkg image no. %d has size (%d,%d)" % (imgcounter,nx,ny) )	
 
 			# - Check bkg image size is equal in all bkg images
-			if imgcounter>1 and (nx!=self.nx or ny!=self.ny):
-				errmsg= 'Bkg image no. ' + str(imgcounter) + ' has different size wrt previous bkg images!'
+			#if imgcounter>1 and (nx!=self.nx or ny!=self.ny):
+			#	errmsg= 'Bkg image no. ' + str(imgcounter) + ' has different size wrt previous bkg images!'
+			#	logger.error(errmsg)
+			#	return -1
+
+			#self.nx= nx
+			#self.ny= ny	
+
+			# - Check bkg image size is equal to desired train image
+			if nx!=self.nx or ny!=self.ny:
+				errmsg= 'Bkg image no. ' + str(imgcounter) + ' has size different from source images!'
 				logger.error(errmsg)
 				return -1
-
-			self.nx= nx
-			self.ny= ny	
 
 			# - Set train data as a tensor of size [Nsamples,Nx,Ny,Nchan] Nchan=1
 			data= data.reshape(imgsize[0],imgsize[1],nchannels)
@@ -293,12 +307,21 @@ class DataProvider(object):
 			ny= imgsize[0]
 			logger.debug("Source image no. %d has size (%d,%d)" % (imgcounter,nx,ny) )
 
-			# - Check source image size is equal to desired train image
-			if nx!=self.nx or ny!=self.ny:
-				errmsg= 'Source image no. ' + str(imgcounter) + ' has size different from bkg images!'
+			# - Check bkg image size is equal in all bkg images
+			if imgcounter>1 and (nx!=self.nx or ny!=self.ny):
+				errmsg= 'Source image no. ' + str(imgcounter) + ' has different size wrt previous source images!'
 				logger.error(errmsg)
 				return -1
+
+			# - Check source image size is equal to desired train image
+			#if nx!=self.nx or ny!=self.ny:
+			#	errmsg= 'Source image no. ' + str(imgcounter) + ' has size different from bkg images!'
+			#	logger.error(errmsg)
+			#	return -1
 		
+			self.nx= nx
+			self.ny= ny
+
 			# - Set train data as a tensor of size [Nsamples,Nx,Ny,Nchan] Nchan=1
 			data= data.reshape(imgsize[0],imgsize[1],nchannels)
 			input_data.append(data)
@@ -389,24 +412,33 @@ class DataProvider(object):
 	#############################
 	def read_train_data(self):	
 		""" Read train data from disk using input filelists """
-		
-		# - Read train data for bkg
-		logger.info("Reading train data for bkg ...")
-		status= self.__read_bkg_train_data(self.img_bkg_filelist)
-		if status<0:
-			return -1
-
+				
 		# - Read train data for source
 		logger.info("Reading train data for source ...")
 		status= self.__read_source_train_data(self.img_source_filelist,self.sourcepars_filelist)
 		if status<0:
 			return -1
 
+		# - Read train data for bkg
+		if self.read_bkg:
+			logger.info("Reading train data for bkg ...")
+			status= self.__read_bkg_train_data(self.img_bkg_filelist)
+			if status<0:
+				return -1
+		else:
+			logger.warn("No bkg data will be read as no filelist was given in input")
+
 		# - Merge data for bkg & sources
-		logger.info("Merging train data for bkg & sources ...")
-		inputs= np.concatenate((self.inputs_bkg,self.inputs_source))
-		outputs= np.concatenate((self.outputs_bkg,self.outputs_source))
-		outputs_labels= np.concatenate((self.outputs_labels_bkg,self.outputs_labels_source))
+		if self.read_bkg:
+			logger.info("Merging train data for bkg & sources ...")
+			inputs= np.concatenate((self.inputs_bkg,self.inputs_source))
+			outputs= np.concatenate((self.outputs_bkg,self.outputs_source))
+			outputs_labels= np.concatenate((self.outputs_labels_bkg,self.outputs_labels_source))
+		else:
+			logger.info("Setting train data to source data only ...")
+			inputs= self.inputs_source
+			outputs= self.outputs_source
+			outputs_labels= self.outputs_labels_source
 
 		# - Shuffle data before splitting in test & validation sample
 		logger.info("Shuffling train data ...")
