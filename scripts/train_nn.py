@@ -68,6 +68,7 @@ def get_args():
 	parser.add_argument('-nepochs', '--nepochs', dest='nepochs', required=False, type=int, default=100, action='store',help='Number of epochs used in network training (default=100)')	
 	parser.add_argument('-optimizer', '--optimizer', dest='optimizer', required=False, type=str, default='rmsprop', action='store',help='Optimizer used (default=rmsprop)')
 	parser.add_argument('-learning_rate', '--learning_rate', dest='learning_rate', required=False, type=float, default=1.e-4, action='store',help='Learning rate (default=1.e-4)')
+	parser.add_argument('-batch_size', '--batch_size', dest='batch_size', required=False, type=int, default=32, action='store',help='Batch size used in training (default=32)')
 	parser.add_argument('-pars_loss_weight', '--pars_loss_weight', dest='pars_loss_weight', required=False, type=float, default=1, action='store',help='Loss weight to be given to source pars learning (default=1)')
 	parser.add_argument('-labels_loss_weight', '--labels_loss_weight', dest='labels_loss_weight', required=False, type=float, default=1, action='store',help='Loss weight to be given to source labels learning (default=1)')
 	parser.add_argument('--flip_train', dest='flip_train', action='store_true',help='Flip object train input data during training according to best MSE match with targets')	
@@ -140,6 +141,7 @@ def main():
 	ntargetpars= args.ntargetpars
 	optimizer= args.optimizer
 	learning_rate= args.learning_rate
+	batch_size= args.batch_size
 	pars_loss_weight= args.pars_loss_weight
 	labels_loss_weight= args.labels_loss_weight
 	nepochs= args.nepochs
@@ -197,7 +199,8 @@ def main():
 	nn= NNTrainer(nnarcfile,dp)
 
 	nn.set_optimizer(optimizer)
-	nn.set_learning_rate(learning_rate)
+	nn.set_learning_rate(learning_rate)	
+	nn.set_batch_size(batch_size)
 	nn.set_pars_loss_weight(pars_loss_weight)
 	nn.set_labels_loss_weight(labels_loss_weight)
 	nn.set_nepochs(nepochs)

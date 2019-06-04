@@ -94,6 +94,7 @@ class NNTrainer(object):
 		self.fitsout= None
 		self.optimizer= 'rmsprop'
 		self.learning_rate= 1.e-4
+		self.batch_size= 32
 		self.nepochs= 10
 		self.pars_loss_weight= 1
 		self.labels_loss_weight= 1
@@ -132,6 +133,10 @@ class NNTrainer(object):
 	def set_nepochs(self,w):
 		""" Set number of train epochs """
 		self.nepochs= w
+
+	def set_batch_size(self,bs):
+		""" Set batch size """
+		self.batch_size= bs
 
 	def set_optimizer(self,opt):
 		""" Set optimizer """
@@ -609,6 +614,7 @@ class NNTrainer(object):
 						y={"nnout": np.concatenate((self.outputs_labels_train,self.outputs_train),axis=1) },
 						validation_data=(self.inputs_test,{"nnout": np.concatenate((self.outputs_labels_test,self.outputs_test),axis=1) }),
 						epochs=1,
+						batch_size=self.batch_size,
 						verbose=1
 					)
 					type_loss_train= self.fitout.history['__classification_metric'][0]
@@ -622,6 +628,7 @@ class NNTrainer(object):
 						y={"nnout": self.outputs_labels_train },
 						validation_data=(self.inputs_test,{"nnout": self.outputs_labels_test}),
 						epochs=1,
+						batch_size=self.batch_size,
 						verbose=1
 					)
 					type_loss_train= self.fitout.history['__classification_metric'][0]
@@ -635,6 +642,7 @@ class NNTrainer(object):
 						y={"nnout": self.outputs_train},
 						validation_data=(self.inputs_test,{"nnout": self.outputs_test}),
 						epochs=1,
+						batch_size=self.batch_size,
 						verbose=1
 					)
 					pars_loss_train= self.fitout.history['__mse_metric'][0]
