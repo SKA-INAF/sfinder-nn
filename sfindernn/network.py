@@ -27,6 +27,7 @@ from keras import optimizers
 from keras.utils import plot_model
 from keras import backend as K
 from keras.models import Model
+from keras.models import load_model
 from keras.layers.normalization import BatchNormalization
 from keras.layers.convolutional import Conv2D
 from keras.layers.convolutional import MaxPooling2D
@@ -36,6 +37,7 @@ from keras.layers.core import Lambda
 from keras.layers.core import Dense
 from keras.layers import Flatten
 from keras.layers import Input
+from keras.utils.generic_utils import get_custom_objects
 import tensorflow as tf
 
 ## GRAPHICS MODULES
@@ -51,15 +53,173 @@ from .data_provider import DataProvider
 logger = logging.getLogger(__name__)
 
 
+#import keras.losses
+#keras.losses.penalized_loss = penalized_loss
+
+def total_loss(learn_labels,learn_pars,nobjects,npars,labels_loss_weight,pars_loss_weight):
+	""" Definition of NN total loss """
+		
+	def loss(y_true,y_pred):
+
+		tot= 0
+
+		if learn_labels:
+			
+			if learn_pars:
+				# - Extract tensors relative to pars
+				y_true_type= y_true[:,:nobjects]
+				y_pred_type= y_pred[:,:nobjects]
+		
+				# - Compute binary crossentropy for labels
+				binaryCE = keras.metrics.binary_crossentropy(y_true_type,y_pred_type)
+
+				# - Extract tensors relative to parameters
+				y_true_pars= y_true[:,nobjects:]
+				y_pred_pars= y_pred[:,nobjects:]
+		
+				# - Replicate true labels to have a tensor of size (N,nobjects*npars)
+				#   This is multiplied by pars so that objects with label=0 are not entering in pars MSE computation (they sum zero)
+				w= K.repeat_elements(y_true_type,npars,axis=1)
+		
+				# - Count number of objects
+				N= tf.count_nonzero(y_true_type,dtype=tf.dtypes.float32)
+		
+				# - Compute MSE for pars relative to target objects (not background)
+				mse= K.sum(K.square( w*(y_pred_pars - y_true_pars) ), axis=-1)/N
+		
+				# - Compute total loss as weighted sum of MSE + binaryCE		
+				tot= pars_loss_weight*mse + labels_loss_weight*binaryCE
+
+			else:
+				binaryCE = keras.metrics.binary_crossentropy(y_true,y_pred)
+				tot= binaryCE
+
+		else:
+			mse= K.mean(K.square(y_pred - y_true), axis=-1)
+			tot= mse
+		
+		return tot
+
+	return loss
+
+
+def model_loss(nobjects,npars,labels_loss_weight,pars_loss_weight):
+	""" Definition of total loss """
+
+	def loss(y_true,y_pred):
+		# - Extract tensors relative to pars
+		y_true_type= y_true[:,:nobjects]
+		y_pred_type= y_pred[:,:nobjects]
+		
+		# - Compute binary crossentropy for labels
+		binaryCE = keras.metrics.binary_crossentropy(y_true_type,y_pred_type)
+
+		# - Extract tensors relative to parameters
+		y_true_pars= y_true[:,nobjects:]
+		y_pred_pars= y_pred[:,nobjects:]
+		
+		# - Replicate true labels to have a tensor of size (N,nobjects*npars)
+		#   This is multiplied by pars so that objects with label=0 are not entering in pars MSE computation (they sum zero)
+		w= K.repeat_elements(y_true_type,npars,axis=1)
+		
+		# - Count number of objects
+		N= tf.count_nonzero(y_true_type,dtype=tf.dtypes.float32)
+		
+		# - Compute MSE for pars relative to target objects (not background)
+		mse= K.sum(K.square( w*(y_pred_pars - y_true_pars) ), axis=-1)/N
+		
+		# - Compute total loss as weighted sum of MSE + binaryCE		
+		tot= pars_loss_weight*mse + labels_loss_weight*binaryCE
+
+		return tot
+
+	return loss
+
+
+def classification_loss():
+	""" Definition of classification loss"""
+
+	def loss(y_true,y_pred):
+		binaryCE = keras.metrics.binary_crossentropy(y_true,y_pred)
+		return binaryCE
+
+	return loss
+
+def classification_metric(learn_pars,nobjects):
+	""" Define classification metric"""
+		
+	def metric(y_true,y_pred):
+		binaryCE= 0
+
+		if learn_pars:
+			# - Extract tensors relative to pars
+			y_true_type= y_true[:,:nobjects]
+			y_pred_type= y_pred[:,:nobjects]
+		
+			# - Compute binary crossentropy for labels
+			binaryCE = keras.metrics.binary_crossentropy(y_true_type,y_pred_type)
+			
+		else:
+			binaryCE = keras.metrics.binary_crossentropy(y_true,y_pred)
+			
+		return binaryCE
+	
+	return metric
+
+
+def regression_loss():
+	""" Definition of regression loss"""
+		
+	def loss(y_true,y_pred):
+		mse= K.mean(K.square(y_pred - y_true), axis=-1)
+		return mse
+
+	return loss
+
+def regression_metric(learn_labels,nobjects,npars):
+	""" Define MSE metric"""
+		
+	def metric(y_true,y_pred):
+	
+		mse= 0
+
+		if learn_labels:
+
+			# - Extract tensors relative to pars
+			y_true_type= y_true[:,:nobjects]
+			y_pred_type= y_pred[:,:nobjects]
+		
+			# - Extract tensors relative to parameters
+			y_true_pars= y_true[:,nobjects:]
+			y_pred_pars= y_pred[:,nobjects:]
+
+			# - Replicate true labels to have a tensor of size (N,nobjects*npars)
+			#   This is multiplied by pars so that objects with label=0 are not entering in pars MSE computation (they sum zero)
+			w= K.repeat_elements(y_true_type,npars,axis=1)
+		
+			# - Count number of objects
+			N= tf.count_nonzero(y_true_type,dtype=tf.dtypes.float32)
+		
+			# - Compute MSE for pars relative to target objects (not background)
+			mse= K.sum(K.square( w*(y_pred_pars - y_true_pars) ), axis=-1)/N
+
+		else:
+			mse= K.mean(K.square(y_pred - y_true), axis=-1)
+		
+		return mse
+
+	return metric
+
+
 ##############################
-##     CLASS DEFINITIONS
+##     NNTrainer CLASS
 ##############################
 class NNTrainer(object):
 	""" Class to create and train a neural net
 
 			Arguments:
 				- nnarc_filename: File with network architecture to be created
-				- 
+				- DataProvider class
 	"""
 	
 	def __init__(self,nnarc_filename,data_provider):
@@ -1746,4 +1906,248 @@ class NNTrainer(object):
 			return -1
 
 		return 0
+
+
+
+##############################
+##     NNTester CLASS
+##############################
+class NNTester(object):
+	""" Class to create and train a neural net
+
+			Arguments:
+				- model_filename: File with saved network architecture & weights
+
+	"""
+	
+	def __init__(self,model_filename,nobjs=1,pars=2):
+		""" Return a NNTester object """
+
+		self.model= None
+		self.model_file= model_filename
+
+		self.nchannels= 1
+		self.data= None
+		self.inputs= None
+		self.outputs_labels= None
+		self.outputs= None
+		self.thr= 0.5
+
+		# - Network loss & metric pars
+		self.learn_labels= True
+		self.learn_pars= True
+		self.nobjects= nobjs
+		self.npars= pars
+		self.labels_loss_weight= 1
+		self.pars_loss_weight= 1
+		
+		# - Input data normalization
+		self.normalize_inputs= True
+		self.normmin= -0.01
+		self.normmax= 10
+
+	#################################
+	##     SETTERS/GETTERS
+	#################################
+	def enable_labels_learning(self,choice):
+		""" Turn on/off learning of labels during training """
+		self.learn_labels= choice
+
+	def enable_pars_learning(self,choice):
+		""" Turn on/off learning of pars during training """
+		self.learn_pars= choice
+
+	def enable_inputs_normalization(self,choice):
+		""" Turn on/off inputs normalization """
+		self.normalize_inputs= choice
+
+	def set_input_data_norm_range(self,datamin,datamax):
+		""" Set input data normalization range """
+		self.normmin= datamin
+		self.normmax= datamax
+
+	def set_nobjects(self,n):
+		""" Set maximum number of detected object in image """
+		self.nobjects= n
+
+	def set_npars(self,n):
+		""" Set number of source parameters to be fitted in model """
+		self.npars= n
+
+	def set_pars_loss_weight(self,w):
+		""" Set source par loss weight """
+		self.pars_loss_weight= w
+
+	def set_labels_loss_weight(self,w):
+		""" Set source labels loss weight """
+		self.labels_loss_weight= w
+
+	#####################################
+	##     LOAD NN FROM DISK
+	#####################################
+	def __load_network(self,filename):
+		""" Load NN model from input filename """
+		
+		logger.info("Loading nn model from file %s ..." % filename)
+		self.model= load_model(
+			filename,
+			custom_objects={
+				'__tot_loss': total_loss(self.learn_labels,self.learn_pars,self.nobjects,self.npars,self.labels_loss_weight,self.pars_loss_weight),
+				'__classification_metric': classification_metric(self.learn_pars,self.nobjects),
+				'__mse_metric': regression_metric(self.learn_labels,self.nobjects,self.npars)
+			}
+		)
+		self.model.summary()
+
+
+	#####################################
+	##     TEST NN TO INPUT DATA
+	#####################################
+	def __test_nn(self,inputs):
+		""" Test NN response on input data """
+	
+		#==================================
+		#==   CHECK DATA
+		#==================================
+		imgsize= np.shape(inputs)
+		nx= imgsize[2]
+		ny= imgsize[1]
+		if nx<=0 or ny<=0:
+			logger.error("Invalid data shape found (%d,%d)!" % (nx,ny))
+			return -1
+
+		#==================================
+		#==   CHECK MODEL
+		#==================================
+		if not self.model:
+			logger.error("Model was not yet loaded from file, this should not occur at this stage!")
+			return -1
+
+		#==================================
+		#==   PREDICT NNOUT WITH MODEL
+		#==================================
+		logger.info("Predicting NN out from input image data...")
+		nnout= self.model.predict(inputs)
+
+		if self.learn_labels:
+			self.outputs_labels= nnout[:,:self.nobjects]
+			if self.learn_pars:
+				self.outputs= nnout[:,self.nobjects:]
+		else:
+			if self.learn_pars:
+				self.outputs= nnout
+
+		print("inputs shape=",inputs.shape)
+		print("nnout shape=",nnout.shape)
+		print("output labels shape=",self.outputs_labels.shape)
+		print("output pars shape=",self.outputs.shape)	
+		print("outputs_labels",self.outputs_labels)
+		print("outputs",self.outputs)
+
+		return 0
+
+	#####################################
+	##     TEST NN TO INPUT IMAGE
+	#####################################
+	def test(self,filename,reload_net=False,draw=True):
+		""" Test NN response on input image """
+
+		#==================================
+		#==   LOAD NN
+		#==================================
+		# - Load NN if not already done or if forced
+		if not self.model or reload_net:
+			logger.info("NN was not yet loaded or requested to be reloaded...")
+			self.__load_network(self.model_file)
+
+		#==================================
+		#==   READ IMAGE
+		#==================================
+		logger.info("Reading image %s ..." % filename)
+		data= None
+		try:
+			self.data, header= Utils.read_fits(filename)
+		except Exception as ex:
+			errmsg= 'Failed to read input image data (err=' + str(ex) + ')'
+			logger.error(errmsg)
+			return -1
+	
+		imgsize= np.shape(self.data)
+		nx= imgsize[1]
+		ny= imgsize[0]
+			
+		logger.info("Input image has size (%d,%d) ..." % (nx,ny) )	
+
+		# - Normalizing data?
+		if self.normalize_inputs:
+			self.data= (self.data - self.normmin)/(self.normmax-self.normmin)
+
+		# - Reshaping data
+		logger.info("Reshaping data for NN input...")
+		self.inputs= self.data.reshape(1,imgsize[0],imgsize[1],self.nchannels)
+
+		#==================================
+		#==   TEST NN
+		#==================================
+		status= self.__test_nn(self.inputs)
+		if status<0:
+			logger.error("Failed to test NN on input data!")
+			return -1
+
+		#==================================
+		#==   DRAW NN RESULTS
+		#==================================
+		if draw:
+			logger.info("Drawing results ...")
+			self.__draw_results()
+
+		return 0
+		
+	#####################################
+	##     DRAW NN RESULTS
+	#####################################
+	def __draw_results(self):
+		""" Draw NN results """
+
+		# - Plot input image
+		(fig, ax) = plt.subplots(1,1, figsize=(10,10),squeeze=False)
+
+		ax[0,0].set_title('Test image')
+		ax[0,0].set_xlabel("x")
+		ax[0,0].set_ylabel("y")
+		img= ax[0,0].imshow(self.data)
+
+		# - Plot color bar
+		#PCM= ax[0,0].get_children()[2]
+		#plt.colorbar(PCM,ax=ax[0,0])
+		fig.colorbar(img)
+
+		# - Plot predicted pars
+		xlist= []
+		ylist= []
+
+		if self.learn_labels:	
+			if self.learn_pars:
+				nobjs= self.outputs_labels.shape[1]
+				for index in range(nobjs):
+					label= self.outputs_labels[0,index]
+					x= self.outputs[0,0 + index*self.npars]
+					y= self.outputs[0,1 + index*self.npars]
+					if label>self.thr:
+						xlist.append(x)
+						ylist.append(y)
+		else:
+			if self.learn_pars:
+				for index in range(self.nobjects):
+					x= self.outputs[0,0 + index*self.npars]
+					y= self.outputs[0,1 + index*self.npars]
+					xlist.append(x)
+					ylist.append(y)
+
+		if xlist and ylist:
+			plt.scatter(np.array(xlist),np.array(ylist),color='r')
+
+		plt.show()
+
+
 
