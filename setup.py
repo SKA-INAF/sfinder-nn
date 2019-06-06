@@ -63,7 +63,7 @@ setup(
 	long_description=read('README.md'),
 	packages=['sfindernn'],
 	install_requires=reqs,
-	scripts=['scripts/generate_train_data.py','scripts/train_nn.py','scripts/create_filelist.sh','test/test_train.sh','test/test_gendata.sh'],
+	scripts=['scripts/generate_train_data.py','scripts/train_nn.py','scripts/create_filelist.sh','scripts/apply_maxpool.py','test/test_train.sh','test/test_gendata.sh','macros/DrawNNLossVSEpochs.C','macros/DrawNNResults.C'],
 	#data_files=[('sfindernn', [os.path.join(data_dir, 'MOC.fits')]) ],
 	#setup_requires=['pytest-runner'],
 	#tests_require=['pytest', 'nose']
